@@ -1,0 +1,99 @@
+[
+    {
+        "name": "全局停止",
+        "selected": true,
+        "trigger": "ctrl+delete",
+        "repeat": 1,
+        "locked": [
+            "name",
+            "steps",
+            "delete",
+            "selected",
+            "repeat"
+        ],
+        "steps": [
+            {
+                "type": "STOPALL"
+            }
+        ]
+    },
+    {
+        "name": "希沃半自动删除锁定元素",
+        "selected": false,
+        "trigger": "0",
+        "steps": [
+            {
+                "type": "key",
+                "value": "ctrl+shift+l",
+                "delay": 0.1
+            },
+            {
+                "type": "key",
+                "value": "esc",
+                "delay": 0.1
+            },
+            {
+                "type": "key",
+                "value": "delete",
+                "delay": 0.1
+            }
+        ],
+        "repeat": 1
+    },
+    {
+        "name": "新宏",
+        "selected": true,
+        "trigger": "ctrl",
+        "steps": [
+            {
+                "type": "key",
+                "value": "ctrl+a",
+                "delay": 0.5
+            },
+            {
+                "type": "key",
+                "value": "ctrl+c",
+                "delay": 0.5
+            },
+            {
+                "type": "key",
+                "value": "right",
+                "delay": 0.5
+            },
+            {
+                "type": "key",
+                "value": "ctrl+v",
+                "delay": 0.0
+            }
+        ],
+        "repeat": 1
+    },
+    {
+        "name": "希沃半自动删除锁定元素 - 副本",
+        "selected": false,
+        "trigger": "0",
+        "steps": [
+            {
+                "type": "key",
+                "value": "ctrl+shift+l",
+                "delay": 0.1
+            },
+            {
+                "type": "key",
+                "value": "esc",
+                "delay": 0.1
+            },
+            {
+                "type": "key",
+                "value": "delete",
+                "delay": 0.1
+            },
+            {
+                "type": "key",
+                "value": "down",
+                "delay": 0.0
+            }
+        ],
+        "repeat": 1
+    }
+]
