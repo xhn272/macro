@@ -1,0 +1,543 @@
+# -*- coding: utf-8 -*-
+"""主窗口与面板：MainWindow、ClassicPanel、SimplePanel。"""
+
+import copy
+import sys
+import traceback
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+from about_text import ABOUT_TEXT
+from core import mgr
+from edit_dialog import EditMacroDialog
+from utils import check_admin_gui, log_error
+
+
+# ---------- 主窗口 ----------
+class MainWindow:
+    """拥有单一 Tk 实例，管理经典/简约两个面板的切换。"""
+
+    def __init__(self):
+        self.window = tk.Tk()
+        check_admin_gui(self.window)
+        self.window.title("按键宏管理器")
+        self.window.geometry("850x500")
+        self.window.protocol("WM_DELETE_WINDOW", self.quit_app)
+        self.window.report_callback_exception = self._on_tk_error
+
+        mgr.load()
+
+        self._build_menubar()
+
+        self.panel_container = ttk.Frame(self.window)
+        self.panel_container.pack(fill=tk.BOTH, expand=True)
+
+        self.classic_panel = ClassicPanel(self.panel_container, self)
+        self.simple_panel = SimplePanel(self.panel_container, self)
+
+        self.current_mode = "classic"
+        self.classic_panel.show()
+        self.classic_panel.refresh_list()
+        self._update_view_menu()
+
+    def _build_menubar(self):
+        menubar = tk.Menu(self.window)
+
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="重新加载配置", command=self.reload_config)
+        file_menu.add_separator()
+        file_menu.add_command(label="退出", command=self.quit_app)
+        menubar.add_cascade(label="文件", menu=file_menu)
+
+        self.view_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="视图", menu=self.view_menu)
+        self.view_menu.add_command(label="经典", command=lambda: self.switch_mode("classic"))
+        self.view_menu.add_command(label="简约", command=lambda: self.switch_mode("simple"))
+        self.view_menu.add_separator()
+
+        self.search_visible = tk.BooleanVar(value=False)
+        self.view_menu.add_checkbutton(label="搜索框", variable=self.search_visible,
+                                        command=self.toggle_search)
+
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="关于", command=self.show_about)
+        menubar.add_cascade(label="帮助", menu=help_menu)
+
+        self.window.config(menu=menubar)
+
+    def _update_view_menu(self):
+        self.view_menu.entryconfig("经典", state=tk.DISABLED if self.current_mode == "classic" else tk.NORMAL)
+        self.view_menu.entryconfig("简约", state=tk.DISABLED if self.current_mode == "simple" else tk.NORMAL)
+
+    @property
+    def current_panel(self):
+        return self.classic_panel if self.current_mode == "classic" else self.simple_panel
+
+    def switch_mode(self, mode):
+        if mode == self.current_mode:
+            return
+        mgr.unregister_all()
+        self.search_visible.set(False)
+        if self.current_mode == "classic":
+            self.classic_panel.hide()
+        else:
+            self.simple_panel.hide()
+        if mode == "classic":
+            self.classic_panel.show()
+            self.classic_panel.refresh_list()
+        else:
+            self.simple_panel.show()
+            self.simple_panel.refresh_list()
+        self.current_mode = mode
+        self._update_view_menu()
+
+    def reload_config(self):
+        mgr.load()
+        mgr.unregister_all()
+        self.search_visible.set(False)
+        self.current_panel.refresh_list()
+
+    def toggle_search(self):
+        self.current_panel.toggle_search()
+
+    def show_about(self):
+        messagebox.showinfo("关于", ABOUT_TEXT, parent=self.window)
+
+    def _on_tk_error(self, exc_type, exc_value, exc_tb):
+        tb_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        log_error(f"UI回调异常:\n{tb_text}")
+        messagebox.showerror("错误", f"发生未预期的错误：\n{exc_value}")
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+    def quit_app(self):
+        mgr.unregister_all()
+        self.window.quit()
+        sys.exit(0)
+
+
+# ---------- 经典模式面板 ----------
+class ClassicPanel:
+    def __init__(self, parent, main_window):
+        self.main_window = main_window
+        self.window = main_window.window
+
+        self.container = ttk.Frame(parent)
+
+        main_frame = ttk.Frame(self.container, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=0)
+        main_frame.rowconfigure(0, weight=1)
+
+        # 左侧宏列表
+        left_frame = ttk.Frame(main_frame)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+
+        search_frame = ttk.Frame(left_frame)
+        search_frame.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(search_frame, text="搜索:").pack(side=tk.LEFT, padx=(0, 5))
+        self.search_var = tk.StringVar()
+        self.search_var.trace("w", lambda *a: self.refresh_list())
+        search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
+        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(search_frame, text="X", width=2, command=self.clear_search).pack(side=tk.LEFT, padx=(5, 0))
+        self.search_frame = search_frame
+        self.search_frame.pack_forget()
+
+        style = ttk.Style()
+        style.configure("Treeview", font=('TkDefaultFont', 12))
+        style.configure("Treeview.Heading", font=('TkDefaultFont', 12, 'bold'))
+
+        columns = ("选择", "名称", "触发键", "步骤数")
+        self.tree = ttk.Treeview(left_frame, columns=columns, show="headings", selectmode="browse")
+        self.tree.heading("选择", text="选择")
+        self.tree.heading("名称", text="名称")
+        self.tree.heading("触发键", text="触发键")
+        self.tree.heading("步骤数", text="步骤数")
+        self.tree.column("选择", width=50, anchor="center")
+        self.tree.column("名称", width=240)
+        self.tree.column("触发键", width=130)
+        self.tree.column("步骤数", width=40, anchor="center")
+
+        self.tree.tag_configure("selected", foreground="green")
+        self.tree.tag_configure("disabled", foreground="black")
+        self.tree.bind("<Double-1>", self.on_double_click)
+        self.tree.bind("<Button-1>", self.on_click)
+
+        scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 右侧按钮区域
+        right_frame = ttk.Frame(main_frame, width=150)
+        right_frame.grid(row=0, column=1, sticky="ns", padx=(0, 5))
+        right_frame.pack_propagate(False)
+
+        group1 = ttk.LabelFrame(right_frame, text="宏管理", relief="ridge", borderwidth=2)
+        group1.pack(fill=tk.X, pady=(0, 10))
+        ttk.Button(group1, text="新增", command=self.new_macro, width=12).pack(pady=2, padx=5, fill=tk.X)
+        ttk.Button(group1, text="编辑", command=self.edit_selected, width=12).pack(pady=2, padx=5, fill=tk.X)
+        ttk.Button(group1, text="拷贝", command=self.copy_macro, width=12).pack(pady=2, padx=5, fill=tk.X)
+        ttk.Button(group1, text="删除", command=self.delete_macro, width=12).pack(pady=2, padx=5, fill=tk.X)
+
+        group2 = ttk.LabelFrame(right_frame, text="状态控制", relief="ridge", borderwidth=2)
+        group2.pack(fill=tk.X, pady=(0, 10))
+        ttk.Button(group2, text="启用勾选", command=self.apply_selected, width=12).pack(pady=2, padx=5, fill=tk.X)
+        ttk.Button(group2, text="停用所有", command=self.disable_all, width=12).pack(pady=2, padx=5, fill=tk.X)
+        ttk.Button(group2, text="刷新列表", command=self.refresh_list, width=12).pack(pady=2, padx=5, fill=tk.X)
+
+        group3 = ttk.LabelFrame(right_frame, text="批量选择", relief="ridge", borderwidth=2)
+        group3.pack(fill=tk.X, pady=(0, 10))
+        ttk.Button(group3, text="全选", command=self.select_all, width=12).pack(pady=2, padx=5, fill=tk.X)
+        ttk.Button(group3, text="全不选", command=self.select_none, width=12).pack(pady=2, padx=5, fill=tk.X)
+        ttk.Button(group3, text="反选", command=self.invert_selection, width=12).pack(pady=2, padx=5, fill=tk.X)
+
+    def show(self):
+        self.container.pack(fill=tk.BOTH, expand=True)
+
+    def hide(self):
+        self.container.pack_forget()
+
+    def refresh_list(self):
+        filter_text = self.search_var.get().strip().lower()
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+        for idx, m in enumerate(mgr.macros):
+            if filter_text and filter_text not in m["name"].lower():
+                continue
+            check = "☑" if m.get("selected", True) else "☐"
+            steps_cnt = len(m.get("steps", []))
+            registered = idx in mgr.registered
+            tag = "selected" if registered else "disabled"
+            self.tree.insert("", tk.END, iid=str(idx), values=(check, m["name"], m["trigger"], steps_cnt), tags=(tag,))
+
+    def save_and_refresh(self):
+        mgr.save()
+        self.refresh_list()
+
+    def get_selected_index(self):
+        sel = self.tree.selection()
+        return int(sel[0]) if sel else None
+
+    def on_click(self, event):
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "cell" and self.tree.identify_column(event.x) == "#1":
+            item = self.tree.identify_row(event.y)
+            if item:
+                idx = int(item)
+                if "selected" in mgr.macros[idx].get("locked", []):
+                    return
+                mgr.macros[idx]["selected"] = not mgr.macros[idx].get("selected", True)
+                self.tree.set(item, column="#1", value="☑" if mgr.macros[idx]["selected"] else "☐")
+                mgr.save()
+
+    def on_double_click(self, event):
+        idx = self.get_selected_index()
+        if idx is not None:
+            EditMacroDialog(self.window, idx, self.save_and_refresh)
+
+    def new_macro(self):
+        if mgr.registered:
+            messagebox.showwarning('操作被禁止', '请先停用所有宏（点击"停用所有"按钮）后再新增宏。')
+            return
+        base_name = "新宏"
+        name = base_name
+        suffix = 1
+        while not mgr.is_name_unique(name):
+            suffix += 1
+            name = f"{base_name}{suffix}"
+        macro = {"name": name, "selected": False, "trigger": "", "repeat": 1, "steps": []}
+        mgr.macros.append(macro)
+        self.refresh_list()
+        EditMacroDialog(self.window, len(mgr.macros) - 1, self.save_and_refresh)
+
+    def edit_selected(self):
+        if mgr.registered:
+            messagebox.showwarning('操作被禁止', '请先停用所有宏（点击"停用所有"按钮）后再编辑宏。')
+            return
+        idx = self.get_selected_index()
+        if idx is None:
+            messagebox.showinfo("提示", "请先选择一个宏")
+            return
+        EditMacroDialog(self.window, idx, self.save_and_refresh)
+
+    def copy_macro(self):
+        if mgr.registered:
+            messagebox.showwarning('操作被禁止', '请先停用所有宏（点击"停用所有"按钮）后再拷贝宏。')
+            return
+        idx = self.get_selected_index()
+        if idx is None:
+            messagebox.showinfo("提示", "请先选择一个宏")
+            return
+        original = mgr.macros[idx]
+        base_name = original.get("name", "宏") + " - 副本"
+        name = base_name
+        suffix = 1
+        while not mgr.is_name_unique(name):
+            suffix += 1
+            name = f"{base_name}{suffix}"
+        new_macro = copy.deepcopy(original)
+        new_macro["name"] = name
+        new_macro["selected"] = False
+        new_macro.pop("locked", None)
+        mgr.macros.append(new_macro)
+        mgr.save()
+        self.refresh_list()
+        messagebox.showinfo('提示', f'已复制宏"{original["name"]}"为"{name}"')
+
+    def delete_macro(self):
+        if mgr.registered:
+            messagebox.showwarning('操作被禁止', '请先停用所有宏（点击"停用所有"按钮）后再删除宏。')
+            return
+        idx = self.get_selected_index()
+        if idx is None:
+            messagebox.showinfo("提示", "请先选择一个宏")
+            return
+        if "delete" in mgr.macros[idx].get("locked", []):
+            messagebox.showwarning("操作被禁止", f'宏"{mgr.macros[idx]["name"]}"已被锁定，无法删除。')
+            return
+        if messagebox.askyesno("确认", f"确定要删除宏 [{mgr.macros[idx]['name']}] 吗？"):
+            del mgr.macros[idx]
+            self.save_and_refresh()
+            self.apply_selected()
+
+    def clear_search(self):
+        self.search_var.set("")
+
+    def toggle_search(self):
+        if self.main_window.search_visible.get():
+            self.search_frame.pack(fill=tk.X, pady=(0, 5), before=self.tree)
+        else:
+            self.search_frame.pack_forget()
+            self.search_var.set("")
+
+    def _get_visible_indices(self):
+        filter_text = self.search_var.get().strip().lower()
+        visible = []
+        for idx, m in enumerate(mgr.macros):
+            if not filter_text or filter_text in m["name"].lower():
+                visible.append(idx)
+        return visible
+
+    def select_all(self):
+        for idx in self._get_visible_indices():
+            m = mgr.macros[idx]
+            if "selected" not in m.get("locked", []):
+                m["selected"] = True
+        mgr.save()
+        self.refresh_list()
+
+    def select_none(self):
+        for idx in self._get_visible_indices():
+            m = mgr.macros[idx]
+            if "selected" not in m.get("locked", []):
+                m["selected"] = False
+        mgr.save()
+        self.refresh_list()
+
+    def invert_selection(self):
+        for idx in self._get_visible_indices():
+            m = mgr.macros[idx]
+            if "selected" not in m.get("locked", []):
+                m["selected"] = not m.get("selected", True)
+        mgr.save()
+        self.refresh_list()
+
+    def apply_selected(self):
+        if mgr.register_all():
+            self.refresh_list()
+            messagebox.showinfo("提示", "已根据当前勾选状态更新热键")
+
+    def disable_all(self):
+        mgr.unregister_all()
+        self.refresh_list()
+        messagebox.showinfo("提示", "已停用所有宏")
+
+
+# ---------- 简约模式面板 ----------
+class SimplePanel:
+    def __init__(self, parent, main_window):
+        self.main_window = main_window
+        self.window = main_window.window
+
+        self.container = ttk.Frame(parent)
+
+        main_frame = ttk.Frame(self.container, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame.columnconfigure(0, weight=3, uniform="simple_split")
+        main_frame.columnconfigure(1, weight=2, uniform="simple_split")
+        main_frame.rowconfigure(0, weight=1)
+
+        self.right_frame = ttk.Frame(main_frame)
+        self.right_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+        self.right_frame.columnconfigure(0, weight=1)
+        self.right_frame.rowconfigure(0, weight=1)
+
+        # 左侧：宏名称列表
+        left_frame = ttk.Frame(main_frame)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+
+        search_frame = ttk.Frame(left_frame)
+        search_frame.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(search_frame, text="搜索:").pack(side=tk.LEFT, padx=(0, 5))
+        self.search_var = tk.StringVar()
+        self.search_var.trace("w", lambda *a: self.refresh_list())
+        search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
+        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(search_frame, text="X", width=2, command=self.clear_search).pack(side=tk.LEFT, padx=(5, 0))
+        self.search_frame = search_frame
+        self.search_frame.pack_forget()
+
+        style = ttk.Style()
+        style.configure("Treeview", font=('TkDefaultFont', 12))
+        self.tree = ttk.Treeview(left_frame, columns=("名称",), show="headings", selectmode="browse")
+        self.tree.heading("名称", text="宏名称")
+        self.tree.column("名称", width=210, anchor="w", stretch=True)
+        self.tree.tag_configure("selected", foreground="green")
+        self.tree.tag_configure("disabled", foreground="black")
+        self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
+
+        scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.placeholder = ttk.Label(self.right_frame, text="请从左侧选择宏", font=('Microsoft YaHei', 12),
+                                     anchor=tk.CENTER)
+        self.placeholder.grid(row=0, column=0, sticky="nsew")
+
+        self.info_frame = ttk.LabelFrame(self.right_frame, text="宏信息", padding="8")
+        self.info_frame.grid(row=0, column=0, sticky="nsew")
+        self.info_frame.grid_remove()
+
+        self.name_label = ttk.Label(self.info_frame, text="名称: ", font=('TkDefaultFont', 10))
+        self.name_label.pack(anchor=tk.W, pady=3)
+        self.trigger_label = ttk.Label(self.info_frame, text="触发键: ")
+        self.trigger_label.pack(anchor=tk.W, pady=3)
+        self.repeat_label = ttk.Label(self.info_frame, text="循环次数: ")
+        self.repeat_label.pack(anchor=tk.W, pady=3)
+        self.steps_label = ttk.Label(self.info_frame, text="步骤数: ")
+        self.steps_label.pack(anchor=tk.W, pady=3)
+
+        btn_frame = ttk.Frame(self.info_frame)
+        btn_frame.pack(fill=tk.X, pady=8)
+        self.enable_btn = ttk.Button(btn_frame, text="启用", command=self.enable_macro, width=8)
+        self.enable_btn.pack(side=tk.LEFT, padx=3)
+        self.disable_btn = ttk.Button(btn_frame, text="停止", command=self.disable_macro, width=8)
+        self.disable_btn.pack(side=tk.LEFT, padx=3)
+
+    def show(self):
+        self.container.pack(fill=tk.BOTH, expand=True)
+
+    def hide(self):
+        self.container.pack_forget()
+
+    @staticmethod
+    def _truncate_name(name, max_len=16):
+        if len(name) > max_len:
+            return name[:max_len - 1] + "…"
+        return name
+
+    def refresh_list(self):
+        filter_text = self.search_var.get().strip().lower()
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+        for idx, m in enumerate(mgr.macros):
+            if filter_text and filter_text not in m["name"].lower():
+                continue
+            registered = idx in mgr.registered
+            tag = "selected" if registered else "disabled"
+            display_name = self._truncate_name(m["name"])
+            self.tree.insert("", tk.END, iid=str(idx), values=(display_name,), tags=(tag,))
+
+    def clear_search(self):
+        self.search_var.set("")
+
+    def toggle_search(self):
+        if self.main_window.search_visible.get():
+            self.search_frame.pack(fill=tk.X, pady=(0, 5), before=self.tree)
+        else:
+            self.search_frame.pack_forget()
+            self.search_var.set("")
+
+    def _update_macro_status(self, idx):
+        if not self.tree.exists(str(idx)):
+            return
+        registered = idx in mgr.registered
+        tag = "selected" if registered else "disabled"
+        self.tree.item(str(idx), tags=(tag,))
+
+    def on_tree_select(self, event):
+        sel = self.tree.selection()
+        if not sel:
+            self.info_frame.grid_remove()
+            self.placeholder.grid()
+            return
+        idx = int(sel[0])
+        macro = mgr.macros[idx]
+        wrap_len = self.info_frame.winfo_width() - 20 if self.info_frame.winfo_width() > 20 else 180
+        self.name_label.config(text=f"名称: {macro.get('name', '')}", wraplength=wrap_len)
+        self.trigger_label.config(text=f"触发键: {macro.get('trigger', '')}", wraplength=wrap_len)
+        self.repeat_label.config(text=f"循环次数: {macro.get('repeat', 1)}", wraplength=wrap_len)
+        self.steps_label.config(text=f"步骤数: {len(macro.get('steps', []))}", wraplength=wrap_len)
+        registered = idx in mgr.registered
+        if registered:
+            self.enable_btn.config(state=tk.DISABLED)
+            self.disable_btn.config(state=tk.NORMAL)
+        else:
+            self.enable_btn.config(state=tk.NORMAL)
+            self.disable_btn.config(state=tk.DISABLED)
+        self.placeholder.grid_remove()
+        self.info_frame.grid()
+
+    def enable_macro(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = int(sel[0])
+        macro = mgr.macros[idx]
+        if "selected" in macro.get("locked", []):
+            messagebox.showwarning("操作被禁止", f'宏"{macro["name"]}"已被锁定，无法更改启用状态。')
+            return
+        trigger = macro.get("trigger")
+        if not trigger:
+            messagebox.showerror("错误", "该宏未设置触发键，无法启用")
+            return
+
+        conflict_idx = None
+        if trigger in mgr.hotkeys:
+            for i, m in enumerate(mgr.macros):
+                if m.get("trigger") == trigger and i in mgr.registered:
+                    conflict_idx = i
+                    break
+            if conflict_idx is not None:
+                conflict_name = mgr.macros[conflict_idx].get("name", "未知宏")
+                if not messagebox.askyesno('热键冲突',
+                                           f'触发键"{trigger}"已被宏"{conflict_name}"占用。\n\n是否覆盖（将停止原宏）？'):
+                    return
+                mgr.unregister_single(conflict_idx)
+                self._update_macro_status(conflict_idx)
+
+        try:
+            mgr.register_single(idx)
+        except ValueError as e:
+            messagebox.showerror('错误', f'触发键"{trigger}"无效：{e}')
+            return
+        self._update_macro_status(idx)
+        self.enable_btn.config(state=tk.DISABLED)
+        self.disable_btn.config(state=tk.NORMAL)
+
+    def disable_macro(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = int(sel[0])
+        macro = mgr.macros[idx]
+        if "selected" in macro.get("locked", []):
+            messagebox.showwarning("操作被禁止", f'宏"{macro["name"]}"已被锁定，无法更改启用状态。')
+            return
+        mgr.unregister_single(idx)
+        self._update_macro_status(idx)
+        self.enable_btn.config(state=tk.NORMAL)
+        self.disable_btn.config(state=tk.DISABLED)
