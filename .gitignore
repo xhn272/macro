@@ -5,3 +5,5 @@ upx-5.1.1-win64/
 .claude/
 .idea/
 *.ico
+*.bat
+*.cmd
