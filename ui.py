@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""主窗口与面板：MainWindow、ClassicPanel、SimplePanel。"""
+"""主窗口界面：经典模式与简约模式两个面板的完整 GUI，支持模式切换与宏列表管理。"""
 
 import copy
 import sys
