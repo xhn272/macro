@@ -13,6 +13,32 @@ from edit_dialog import EditMacroDialog
 from utils import check_admin_gui, log_error
 
 
+class SearchBar:
+    """搜索框组件，封装搜索输入、清除按钮和显示/隐藏逻辑。"""
+
+    def __init__(self, parent, on_change, before_widget):
+        self.frame = ttk.Frame(parent)
+        self.frame.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(self.frame, text="搜索:").pack(side=tk.LEFT, padx=(0, 5))
+        self.var = tk.StringVar()
+        self.var.trace("w", lambda *a: on_change())
+        entry = ttk.Entry(self.frame, textvariable=self.var)
+        entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(self.frame, text="X", width=2, command=self.clear).pack(side=tk.LEFT, padx=(5, 0))
+        self.before_widget = before_widget
+        self.frame.pack_forget()
+
+    def clear(self):
+        self.var.set("")
+
+    def show(self):
+        self.frame.pack(fill=tk.X, pady=(0, 5), before=self.before_widget)
+
+    def hide(self):
+        self.frame.pack_forget()
+        self.var.set("")
+
+
 # ---------- 主窗口 ----------
 class MainWindow:
     """拥有单一 Tk 实例，管理经典/简约两个面板的切换。"""
@@ -129,20 +155,11 @@ class ClassicPanel:
         main_frame.columnconfigure(1, weight=0)
         main_frame.rowconfigure(0, weight=1)
 
-        # 左侧宏列表
+        # 经典模式 - 左侧宏列表
         left_frame = ttk.Frame(main_frame)
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
-        search_frame = ttk.Frame(left_frame)
-        search_frame.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(search_frame, text="搜索:").pack(side=tk.LEFT, padx=(0, 5))
-        self.search_var = tk.StringVar()
-        self.search_var.trace("w", lambda *a: self.refresh_list())
-        search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
-        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(search_frame, text="X", width=2, command=self.clear_search).pack(side=tk.LEFT, padx=(5, 0))
-        self.search_frame = search_frame
-        self.search_frame.pack_forget()
+        self.search_bar = SearchBar(left_frame, self.refresh_list, self.tree)
 
         style = ttk.Style()
         style.configure("Treeview", font=('TkDefaultFont', 12))
@@ -200,7 +217,7 @@ class ClassicPanel:
         self.container.pack_forget()
 
     def refresh_list(self):
-        filter_text = self.search_var.get().strip().lower()
+        filter_text = self.search_bar.var.get().strip().lower()
         for row in self.tree.get_children():
             self.tree.delete(row)
         for idx, m in enumerate(mgr.macros):
@@ -302,18 +319,14 @@ class ClassicPanel:
             self.save_and_refresh()
             self.apply_selected()
 
-    def clear_search(self):
-        self.search_var.set("")
-
     def toggle_search(self):
         if self.main_window.search_visible.get():
-            self.search_frame.pack(fill=tk.X, pady=(0, 5), before=self.tree)
+            self.search_bar.show()
         else:
-            self.search_frame.pack_forget()
-            self.search_var.set("")
+            self.search_bar.hide()
 
     def _get_visible_indices(self):
-        filter_text = self.search_var.get().strip().lower()
+        filter_text = self.search_bar.var.get().strip().lower()
         visible = []
         for idx, m in enumerate(mgr.macros):
             if not filter_text or filter_text in m["name"].lower():
@@ -374,20 +387,11 @@ class SimplePanel:
         self.right_frame.columnconfigure(0, weight=1)
         self.right_frame.rowconfigure(0, weight=1)
 
-        # 左侧：宏名称列表
+        # 简约模式 - 左侧宏名称列表
         left_frame = ttk.Frame(main_frame)
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
 
-        search_frame = ttk.Frame(left_frame)
-        search_frame.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(search_frame, text="搜索:").pack(side=tk.LEFT, padx=(0, 5))
-        self.search_var = tk.StringVar()
-        self.search_var.trace("w", lambda *a: self.refresh_list())
-        search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
-        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(search_frame, text="X", width=2, command=self.clear_search).pack(side=tk.LEFT, padx=(5, 0))
-        self.search_frame = search_frame
-        self.search_frame.pack_forget()
+        self.search_bar = SearchBar(left_frame, self.refresh_list, self.tree)
 
         style = ttk.Style()
         style.configure("Treeview", font=('TkDefaultFont', 12))
@@ -440,7 +444,7 @@ class SimplePanel:
         return name
 
     def refresh_list(self):
-        filter_text = self.search_var.get().strip().lower()
+        filter_text = self.search_bar.var.get().strip().lower()
         for row in self.tree.get_children():
             self.tree.delete(row)
         for idx, m in enumerate(mgr.macros):
@@ -451,15 +455,11 @@ class SimplePanel:
             display_name = self._truncate_name(m["name"])
             self.tree.insert("", tk.END, iid=str(idx), values=(display_name,), tags=(tag,))
 
-    def clear_search(self):
-        self.search_var.set("")
-
     def toggle_search(self):
         if self.main_window.search_visible.get():
-            self.search_frame.pack(fill=tk.X, pady=(0, 5), before=self.tree)
+            self.search_bar.show()
         else:
-            self.search_frame.pack_forget()
-            self.search_var.set("")
+            self.search_bar.hide()
 
     def _update_macro_status(self, idx):
         if not self.tree.exists(str(idx)):
