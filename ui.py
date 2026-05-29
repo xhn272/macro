@@ -159,12 +159,11 @@ class ClassicPanel:
         left_frame = ttk.Frame(main_frame)
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
-        self.search_bar = SearchBar(left_frame, self.refresh_list, self.tree)
-
         style = ttk.Style()
         style.configure("Treeview", font=('TkDefaultFont', 12))
         style.configure("Treeview.Heading", font=('TkDefaultFont', 12, 'bold'))
 
+        # Treeview 必须在 SearchBar 之前创建，因为 SearchBar 需要引用它
         columns = ("选择", "名称", "触发键", "步骤数")
         self.tree = ttk.Treeview(left_frame, columns=columns, show="headings", selectmode="browse")
         self.tree.heading("选择", text="选择")
@@ -183,6 +182,9 @@ class ClassicPanel:
 
         scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
+
+        self.search_bar = SearchBar(left_frame, self.refresh_list, self.tree)
+
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -399,10 +401,10 @@ class SimplePanel:
         left_frame = ttk.Frame(main_frame)
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
 
-        self.search_bar = SearchBar(left_frame, self.refresh_list, self.tree)
-
         style = ttk.Style()
         style.configure("Treeview", font=('TkDefaultFont', 12))
+
+        # Treeview 必须在 SearchBar 之前创建，因为 SearchBar 需要引用它
         self.tree = ttk.Treeview(left_frame, columns=("名称",), show="headings", selectmode="browse")
         self.tree.heading("名称", text="宏名称")
         self.tree.column("名称", width=210, anchor="w", stretch=True)
@@ -412,6 +414,9 @@ class SimplePanel:
 
         scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
+
+        self.search_bar = SearchBar(left_frame, self.refresh_list, self.tree)
+
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
