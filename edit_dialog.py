@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""宏编辑对话框。"""
+"""宏编辑对话框：新建或修改宏的名称、触发键、执行步骤等信息。"""
 
 import threading
 import tkinter as tk
