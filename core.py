@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""宏管理器核心：MacroManager、步骤执行、崩溃处理。"""
+"""宏管理核心：加载/保存配置文件、注册/注销热键、执行宏步骤。"""
 
 import json
 import os
