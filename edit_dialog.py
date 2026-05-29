@@ -161,7 +161,7 @@ class EditMacroDialog:
                 current_width = 650
             self.dialog.geometry(f"{current_width}x{total_height}")
             self.dialog.minsize(600, total_height)
-        except Exception as e:
+        except tk.TclError as e:
             log_error(f"调整编辑窗口高度时出错: {e}")
 
     def _apply_locks(self):
@@ -203,7 +203,7 @@ class EditMacroDialog:
             try:
                 hotkey = keyboard.read_hotkey(suppress=False)
                 result[0] = hotkey
-            except Exception as e:
+            except (ValueError, RuntimeError) as e:
                 log_error(f"录制热键时出错: {e}")
                 result[0] = None
             finally:

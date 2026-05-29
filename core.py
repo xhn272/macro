@@ -89,7 +89,7 @@ class MacroManager:
         for _, hid in list(self.hotkeys.items()):
             try:
                 keyboard.remove_hotkey(hid)
-            except Exception as e:
+            except (ValueError, KeyError) as e:
                 log_error(f"注册前清理热键失败: {e}")
         self.hotkeys.clear()
         self.registered.clear()
@@ -130,7 +130,7 @@ class MacroManager:
                 self.hotkeys[trig] = hid
                 self.registered.add(idx)
                 print(f"已注册：{trig} -> {macro['name']}")
-            except Exception as e:
+            except (ValueError, RuntimeError) as e:
                 log_error(f"注册热键失败 [{macro['name']} / {trig}]: {e}")
                 invalid.append((macro["name"], trig, str(e)))
 
@@ -146,7 +146,7 @@ class MacroManager:
         for _, hid in list(self.hotkeys.items()):
             try:
                 keyboard.remove_hotkey(hid)
-            except Exception as e:
+            except (ValueError, KeyError) as e:
                 log_error(f"取消注册热键失败: {e}")
         self.hotkeys.clear()
         self.registered.clear()
@@ -174,7 +174,7 @@ class MacroManager:
                 del self.hotkeys[trigger]
                 self.registered.remove(index)
                 print(f"简约模式：已注销 {trigger} -> {macro['name']}")
-            except Exception as e:
+            except (ValueError, KeyError) as e:
                 log_error(f"简约模式取消注册热键失败: {e}")
 
 

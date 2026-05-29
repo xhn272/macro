@@ -218,16 +218,24 @@ class ClassicPanel:
 
     def refresh_list(self):
         filter_text = self.search_bar.var.get().strip().lower()
-        for row in self.tree.get_children():
-            self.tree.delete(row)
+        existing = set(self.tree.get_children())
         for idx, m in enumerate(mgr.macros):
             if filter_text and filter_text not in m["name"].lower():
                 continue
+            iid = str(idx)
             check = "☑" if m.get("selected", True) else "☐"
             steps_cnt = len(m.get("steps", []))
             registered = idx in mgr.registered
             tag = "selected" if registered else "disabled"
-            self.tree.insert("", tk.END, iid=str(idx), values=(check, m["name"], m["trigger"], steps_cnt), tags=(tag,))
+            values = (check, m["name"], m["trigger"], steps_cnt)
+            if iid in existing:
+                if self.tree.item(iid, "values") != values or self.tree.item(iid, "tags") != (tag,):
+                    self.tree.item(iid, values=values, tags=(tag,))
+                existing.discard(iid)
+            else:
+                self.tree.insert("", tk.END, iid=iid, values=values, tags=(tag,))
+        for iid in existing:
+            self.tree.delete(iid)
 
     def save_and_refresh(self):
         mgr.save()
@@ -445,15 +453,22 @@ class SimplePanel:
 
     def refresh_list(self):
         filter_text = self.search_bar.var.get().strip().lower()
-        for row in self.tree.get_children():
-            self.tree.delete(row)
+        existing = set(self.tree.get_children())
         for idx, m in enumerate(mgr.macros):
             if filter_text and filter_text not in m["name"].lower():
                 continue
+            iid = str(idx)
             registered = idx in mgr.registered
             tag = "selected" if registered else "disabled"
-            display_name = self._truncate_name(m["name"])
-            self.tree.insert("", tk.END, iid=str(idx), values=(display_name,), tags=(tag,))
+            values = (self._truncate_name(m["name"]),)
+            if iid in existing:
+                if self.tree.item(iid, "values") != values or self.tree.item(iid, "tags") != (tag,):
+                    self.tree.item(iid, values=values, tags=(tag,))
+                existing.discard(iid)
+            else:
+                self.tree.insert("", tk.END, iid=iid, values=values, tags=(tag,))
+        for iid in existing:
+            self.tree.delete(iid)
 
     def toggle_search(self):
         if self.main_window.search_visible.get():

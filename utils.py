@@ -58,7 +58,7 @@ def _prune_old_logs(log_dir, keep=50):
         files.sort(key=os.path.getmtime, reverse=True)
         for old in files[keep:]:
             os.remove(old)
-    except Exception:
+    except OSError:
         pass
 
 
@@ -76,7 +76,7 @@ def log_error(msg):
 def is_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
-    except Exception:
+    except (AttributeError, OSError):
         return False
 
 
