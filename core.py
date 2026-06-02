@@ -26,36 +26,42 @@ class MacroManager:
         self._lock = threading.Lock()
 
     def load(self):
-        try:
-            if os.path.exists(self.config_file):
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    self.macros = json.load(f)
-                migrated = False
-                for m in self.macros:
-                    if "enabled" in m and "selected" not in m:
-                        m["selected"] = m.pop("enabled")
-                        migrated = True
-                if migrated:
-                    self.save()
-                self._ensure_stopall_macro()
-            else:
-                self.macros = [{
-                    "name": "示例宏",
-                    "selected": True,
-                    "trigger": "f2",
-                    "repeat": 1,
-                    "steps": [
-                        {"type": "key", "value": "ctrl+shift+l", "delay": 0.1},
-                        {"type": "key", "value": "esc", "delay": 0.1},
-                        {"type": "key", "value": "delete", "delay": 0.1}
-                    ]
-                }]
-                self.save()
-                self._ensure_stopall_macro()
-        except Exception as e:
-            messagebox.showerror("错误", f"加载配置失败：{e}")
+        with self._lock:
+            try:
+                if os.path.exists(self.config_file):
+                    with open(self.config_file, 'r', encoding='utf-8') as f:
+                        self.macros = json.load(f)
+                    migrated = False
+                    for m in self.macros:
+                        if "enabled" in m and "selected" not in m:
+                            m["selected"] = m.pop("enabled")
+                            migrated = True
+                    if migrated:
+                        self._save_unlocked()
+                    self._ensure_stopall_unlocked()
+                else:
+                    self.macros = [{
+                        "name": "示例宏",
+                        "selected": True,
+                        "trigger": "f2",
+                        "repeat": 1,
+                        "steps": [
+                            {"type": "key", "value": "ctrl+shift+l", "delay": 0.1},
+                            {"type": "key", "value": "esc", "delay": 0.1},
+                            {"type": "key", "value": "delete", "delay": 0.1}
+                        ]
+                    }]
+                    self._save_unlocked()
+                    self._ensure_stopall_unlocked()
+            except Exception as e:
+                messagebox.showerror("错误", f"加载配置失败：{e}")
 
     def save(self):
+        with self._lock:
+            self._save_unlocked()
+
+    def _save_unlocked(self):
+        """内部方法：不加锁，调用方需已持有 self._lock。"""
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(self.macros, f, indent=4, ensure_ascii=False)
@@ -63,6 +69,11 @@ class MacroManager:
             messagebox.showerror("错误", f"保存配置失败：{e}")
 
     def _ensure_stopall_macro(self):
+        with self._lock:
+            self._ensure_stopall_unlocked()
+
+    def _ensure_stopall_unlocked(self):
+        """内部方法：不加锁，调用方需已持有 self._lock。"""
         has_stopall = any(
             any(s.get("type") == "STOPALL" for s in m.get("steps", []))
             for m in self.macros
@@ -77,15 +88,103 @@ class MacroManager:
                 "steps": [{"type": "STOPALL"}]
             }
             self.macros.insert(0, stopall_macro)
-            self.save()
+            self._save_unlocked()
 
     def is_name_unique(self, name, exclude_index=None):
-        for i, m in enumerate(self.macros):
-            if i == exclude_index:
-                continue
-            if m.get("name") == name:
-                return False
-        return True
+        with self._lock:
+            for i, m in enumerate(self.macros):
+                if i == exclude_index:
+                    continue
+                if m.get("name") == name:
+                    return False
+            return True
+
+    # ── 线程安全的辅助方法（供 UI 层使用）──────────────────────────────
+
+    def get_snapshot(self):
+        """返回 macros 和 registered 的一致性快照，供 UI 只读遍历。"""
+        with self._lock:
+            return list(self.macros), set(self.registered)
+
+    def is_any_registered(self):
+        with self._lock:
+            return bool(self.registered)
+
+    def is_index_registered(self, idx):
+        with self._lock:
+            return idx in self.registered
+
+    def has_hotkey(self, trigger):
+        with self._lock:
+            return trigger in self.hotkeys
+
+    def get_macro(self, idx):
+        """返回指定索引宏的浅拷贝，避免外部直接持有内部引用。"""
+        with self._lock:
+            if 0 <= idx < len(self.macros):
+                return dict(self.macros[idx])
+            return None
+
+    def is_field_locked(self, idx, field):
+        """检查指定宏的某个字段是否被锁定。索引越界返回 True。"""
+        with self._lock:
+            if 0 <= idx < len(self.macros):
+                return field in self.macros[idx].get("locked", [])
+            return True
+
+    def get_macros_count(self):
+        with self._lock:
+            return len(self.macros)
+
+    def append_macro(self, macro):
+        """线程安全地追加宏，返回新索引。"""
+        with self._lock:
+            idx = len(self.macros)
+            self.macros.append(macro)
+            self._save_unlocked()
+            return idx
+
+    def replace_macro(self, idx, macro):
+        """线程安全地替换指定索引的宏。"""
+        with self._lock:
+            if 0 <= idx < len(self.macros):
+                self.macros[idx] = macro
+                self._save_unlocked()
+
+    def save_macro(self, idx, macro):
+        """线程安全地保存宏：idx 有效则替换，否则追加。"""
+        with self._lock:
+            if idx is not None and 0 <= idx < len(self.macros):
+                self.macros[idx] = macro
+            else:
+                self.macros.append(macro)
+            self._save_unlocked()
+
+    def remove_macro(self, idx):
+        """线程安全地删除宏。"""
+        with self._lock:
+            if 0 <= idx < len(self.macros):
+                del self.macros[idx]
+                self._save_unlocked()
+
+    def update_selected(self, idx, selected):
+        """线程安全地更新宏的选中状态。"""
+        with self._lock:
+            if 0 <= idx < len(self.macros):
+                self.macros[idx]["selected"] = selected
+                self._save_unlocked()
+
+    def toggle_selected(self, idx):
+        """线程安全地翻转宏的选中状态，返回新值（None 表示索引无效或被锁定）。"""
+        with self._lock:
+            if 0 <= idx < len(self.macros):
+                current = self.macros[idx].get("selected", True)
+                self.macros[idx]["selected"] = not current
+                self._save_unlocked()
+                return not current
+            return None
+
+    # ── 热键注册 / 注销 ──────────────────────────────────────────────
 
     def register_all(self):
         with self._lock:

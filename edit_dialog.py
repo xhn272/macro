@@ -20,7 +20,7 @@ class EditMacroDialog:
         self.on_save = on_save_callback
 
         if macro_index is not None:
-            self.macro = mgr.macros[macro_index].copy()
+            self.macro = mgr.get_macro(macro_index)
         else:
             self.macro = {"name": "新宏", "selected": True, "trigger": "", "repeat": 1, "steps": []}
 
@@ -29,7 +29,7 @@ class EditMacroDialog:
         self.dialog.transient(parent)
         self.dialog.grab_set()
         self.dialog.resizable(True, True)
-        self.dialog.minsize(600, 400)
+        self.dialog.minsize(780, 400)
 
         paned = ttk.PanedWindow(self.dialog, orient=tk.HORIZONTAL)
         paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -157,10 +157,10 @@ class EditMacroDialog:
             deco_height = self.dialog.winfo_rooty() - self.dialog.winfo_y()
             total_height = max_height + deco_height + 10
             current_width = self.dialog.winfo_width()
-            if current_width < 600:
-                current_width = 650
+            if current_width < 780:
+                current_width = 780
             self.dialog.geometry(f"{current_width}x{total_height}")
-            self.dialog.minsize(600, total_height)
+            self.dialog.minsize(780, total_height)
         except tk.TclError as e:
             log_error(f"调整编辑窗口高度时出错: {e}")
 
@@ -312,8 +312,13 @@ class EditMacroDialog:
         canvas = tk.Canvas(parent, highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=canvas.yview)
         scrollable = ttk.Frame(canvas)
+
         scrollable.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scrollable, anchor="nw")
+        win_id = canvas.create_window((0, 0), window=scrollable, anchor="nw")
+
+        # 让内层 Frame 宽度跟随 Canvas，避免内容被裁剪
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win_id, width=e.width))
+
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -632,9 +637,6 @@ class EditMacroDialog:
         self.macro["name"] = name
         self.macro["trigger"] = trigger
         self.macro["repeat"] = self.repeat_var.get()
-        if self.macro_index is not None:
-            mgr.macros[self.macro_index] = self.macro
-        else:
-            mgr.macros.append(self.macro)
+        mgr.save_macro(self.macro_index, self.macro)
         self.on_save()
         self.dialog.destroy()

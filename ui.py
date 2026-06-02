@@ -220,15 +220,15 @@ class ClassicPanel:
 
     def refresh_list(self):
         filter_text = self.search_bar.var.get().strip().lower()
+        macros, registered = mgr.get_snapshot()
         existing = set(self.tree.get_children())
-        for idx, m in enumerate(mgr.macros):
+        for idx, m in enumerate(macros):
             if filter_text and filter_text not in m["name"].lower():
                 continue
             iid = str(idx)
             check = "☑" if m.get("selected", True) else "☐"
             steps_cnt = len(m.get("steps", []))
-            registered = idx in mgr.registered
-            tag = "selected" if registered else "disabled"
+            tag = "selected" if idx in registered else "disabled"
             values = (check, m["name"], m["trigger"], steps_cnt)
             if iid in existing:
                 if self.tree.item(iid, "values") != values or self.tree.item(iid, "tags") != (tag,):
@@ -253,11 +253,14 @@ class ClassicPanel:
             item = self.tree.identify_row(event.y)
             if item:
                 idx = int(item)
-                if "selected" in mgr.macros[idx].get("locked", []):
+                macro = mgr.get_macro(idx)
+                if macro is None:
                     return
-                mgr.macros[idx]["selected"] = not mgr.macros[idx].get("selected", True)
-                self.tree.set(item, column="#1", value="☑" if mgr.macros[idx]["selected"] else "☐")
-                mgr.save()
+                if "selected" in macro.get("locked", []):
+                    return
+                new_val = mgr.toggle_selected(idx)
+                if new_val is not None:
+                    self.tree.set(item, column="#1", value="☑" if new_val else "☐")
 
     def on_double_click(self, event):
         idx = self.get_selected_index()
@@ -265,7 +268,7 @@ class ClassicPanel:
             EditMacroDialog(self.window, idx, self.save_and_refresh)
 
     def new_macro(self):
-        if mgr.registered:
+        if mgr.is_any_registered():
             messagebox.showwarning('操作被禁止', '请先停用所有宏（点击"停用所有"按钮）后再新增宏。')
             return
         base_name = "新宏"
@@ -275,12 +278,12 @@ class ClassicPanel:
             suffix += 1
             name = f"{base_name}{suffix}"
         macro = {"name": name, "selected": False, "trigger": "", "repeat": 1, "steps": []}
-        mgr.macros.append(macro)
+        new_idx = mgr.append_macro(macro)
         self.refresh_list()
-        EditMacroDialog(self.window, len(mgr.macros) - 1, self.save_and_refresh)
+        EditMacroDialog(self.window, new_idx, self.save_and_refresh)
 
     def edit_selected(self):
-        if mgr.registered:
+        if mgr.is_any_registered():
             messagebox.showwarning('操作被禁止', '请先停用所有宏（点击"停用所有"按钮）后再编辑宏。')
             return
         idx = self.get_selected_index()
@@ -290,14 +293,16 @@ class ClassicPanel:
         EditMacroDialog(self.window, idx, self.save_and_refresh)
 
     def copy_macro(self):
-        if mgr.registered:
+        if mgr.is_any_registered():
             messagebox.showwarning('操作被禁止', '请先停用所有宏（点击"停用所有"按钮）后再拷贝宏。')
             return
         idx = self.get_selected_index()
         if idx is None:
             messagebox.showinfo("提示", "请先选择一个宏")
             return
-        original = mgr.macros[idx]
+        original = mgr.get_macro(idx)
+        if original is None:
+            return
         base_name = original.get("name", "宏") + " - 副本"
         name = base_name
         suffix = 1
@@ -308,24 +313,26 @@ class ClassicPanel:
         new_macro["name"] = name
         new_macro["selected"] = False
         new_macro.pop("locked", None)
-        mgr.macros.append(new_macro)
-        mgr.save()
+        mgr.append_macro(new_macro)
         self.refresh_list()
         messagebox.showinfo('提示', f'已复制宏"{original["name"]}"为"{name}"')
 
     def delete_macro(self):
-        if mgr.registered:
+        if mgr.is_any_registered():
             messagebox.showwarning('操作被禁止', '请先停用所有宏（点击"停用所有"按钮）后再删除宏。')
             return
         idx = self.get_selected_index()
         if idx is None:
             messagebox.showinfo("提示", "请先选择一个宏")
             return
-        if "delete" in mgr.macros[idx].get("locked", []):
-            messagebox.showwarning("操作被禁止", f'宏"{mgr.macros[idx]["name"]}"已被锁定，无法删除。')
+        macro = mgr.get_macro(idx)
+        if macro is None:
             return
-        if messagebox.askyesno("确认", f"确定要删除宏 [{mgr.macros[idx]['name']}] 吗？"):
-            del mgr.macros[idx]
+        if "delete" in macro.get("locked", []):
+            messagebox.showwarning("操作被禁止", f'宏"{macro["name"]}"已被锁定，无法删除。')
+            return
+        if messagebox.askyesno("确认", f"确定要删除宏 [{macro['name']}] 吗？"):
+            mgr.remove_macro(idx)
             self.save_and_refresh()
             self.apply_selected()
 
@@ -337,34 +344,31 @@ class ClassicPanel:
 
     def _get_visible_indices(self):
         filter_text = self.search_bar.var.get().strip().lower()
+        macros, _ = mgr.get_snapshot()
         visible = []
-        for idx, m in enumerate(mgr.macros):
+        for idx, m in enumerate(macros):
             if not filter_text or filter_text in m["name"].lower():
                 visible.append(idx)
         return visible
 
     def select_all(self):
         for idx in self._get_visible_indices():
-            m = mgr.macros[idx]
-            if "selected" not in m.get("locked", []):
-                m["selected"] = True
-        mgr.save()
+            if not mgr.is_field_locked(idx, "selected"):
+                mgr.update_selected(idx, True)
         self.refresh_list()
 
     def select_none(self):
         for idx in self._get_visible_indices():
-            m = mgr.macros[idx]
-            if "selected" not in m.get("locked", []):
-                m["selected"] = False
-        mgr.save()
+            if not mgr.is_field_locked(idx, "selected"):
+                mgr.update_selected(idx, False)
         self.refresh_list()
 
     def invert_selection(self):
         for idx in self._get_visible_indices():
-            m = mgr.macros[idx]
-            if "selected" not in m.get("locked", []):
-                m["selected"] = not m.get("selected", True)
-        mgr.save()
+            if not mgr.is_field_locked(idx, "selected"):
+                macro = mgr.get_macro(idx)
+                if macro is not None:
+                    mgr.update_selected(idx, not macro.get("selected", True))
         self.refresh_list()
 
     def apply_selected(self):
@@ -458,13 +462,13 @@ class SimplePanel:
 
     def refresh_list(self):
         filter_text = self.search_bar.var.get().strip().lower()
+        macros, registered = mgr.get_snapshot()
         existing = set(self.tree.get_children())
-        for idx, m in enumerate(mgr.macros):
+        for idx, m in enumerate(macros):
             if filter_text and filter_text not in m["name"].lower():
                 continue
             iid = str(idx)
-            registered = idx in mgr.registered
-            tag = "selected" if registered else "disabled"
+            tag = "selected" if idx in registered else "disabled"
             values = (self._truncate_name(m["name"]),)
             if iid in existing:
                 if self.tree.item(iid, "values") != values or self.tree.item(iid, "tags") != (tag,):
@@ -484,8 +488,7 @@ class SimplePanel:
     def _update_macro_status(self, idx):
         if not self.tree.exists(str(idx)):
             return
-        registered = idx in mgr.registered
-        tag = "selected" if registered else "disabled"
+        tag = "selected" if mgr.is_index_registered(idx) else "disabled"
         self.tree.item(str(idx), tags=(tag,))
 
     def on_tree_select(self, event):
@@ -495,14 +498,15 @@ class SimplePanel:
             self.placeholder.grid()
             return
         idx = int(sel[0])
-        macro = mgr.macros[idx]
+        macro = mgr.get_macro(idx)
+        if macro is None:
+            return
         wrap_len = self.info_frame.winfo_width() - 20 if self.info_frame.winfo_width() > 20 else 180
         self.name_label.config(text=f"名称: {macro.get('name', '')}", wraplength=wrap_len)
         self.trigger_label.config(text=f"触发键: {macro.get('trigger', '')}", wraplength=wrap_len)
         self.repeat_label.config(text=f"循环次数: {macro.get('repeat', 1)}", wraplength=wrap_len)
         self.steps_label.config(text=f"步骤数: {len(macro.get('steps', []))}", wraplength=wrap_len)
-        registered = idx in mgr.registered
-        if registered:
+        if mgr.is_index_registered(idx):
             self.enable_btn.config(state=tk.DISABLED)
             self.disable_btn.config(state=tk.NORMAL)
         else:
@@ -516,7 +520,9 @@ class SimplePanel:
         if not sel:
             return
         idx = int(sel[0])
-        macro = mgr.macros[idx]
+        macro = mgr.get_macro(idx)
+        if macro is None:
+            return
         if "selected" in macro.get("locked", []):
             messagebox.showwarning("操作被禁止", f'宏"{macro["name"]}"已被锁定，无法更改启用状态。')
             return
@@ -526,13 +532,15 @@ class SimplePanel:
             return
 
         conflict_idx = None
-        if trigger in mgr.hotkeys:
-            for i, m in enumerate(mgr.macros):
-                if m.get("trigger") == trigger and i in mgr.registered:
+        if mgr.has_hotkey(trigger):
+            macros_snap, registered_snap = mgr.get_snapshot()
+            for i, m in enumerate(macros_snap):
+                if m.get("trigger") == trigger and i in registered_snap:
                     conflict_idx = i
                     break
             if conflict_idx is not None:
-                conflict_name = mgr.macros[conflict_idx].get("name", "未知宏")
+                conflict_macro = mgr.get_macro(conflict_idx)
+                conflict_name = conflict_macro.get("name", "未知宏") if conflict_macro else "未知宏"
                 if not messagebox.askyesno('热键冲突',
                                            f'触发键"{trigger}"已被宏"{conflict_name}"占用。\n\n是否覆盖（将停止原宏）？'):
                     return
@@ -553,7 +561,9 @@ class SimplePanel:
         if not sel:
             return
         idx = int(sel[0])
-        macro = mgr.macros[idx]
+        macro = mgr.get_macro(idx)
+        if macro is None:
+            return
         if "selected" in macro.get("locked", []):
             messagebox.showwarning("操作被禁止", f'宏"{macro["name"]}"已被锁定，无法更改启用状态。')
             return
