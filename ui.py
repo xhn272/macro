@@ -334,7 +334,6 @@ class ClassicPanel:
         if messagebox.askyesno("确认", f"确定要删除宏 [{macro['name']}] 吗？"):
             mgr.remove_macro(idx)
             self.save_and_refresh()
-            self.apply_selected()
 
     def toggle_search(self):
         if self.main_window.search_visible.get():
