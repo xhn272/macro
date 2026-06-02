@@ -271,16 +271,8 @@ class ClassicPanel:
         if mgr.is_any_registered():
             messagebox.showwarning('操作被禁止', '请先停用所有宏（点击"停用所有"按钮）后再新增宏。')
             return
-        base_name = "新宏"
-        name = base_name
-        suffix = 1
-        while not mgr.is_name_unique(name):
-            suffix += 1
-            name = f"{base_name}{suffix}"
-        macro = {"name": name, "selected": False, "trigger": "", "repeat": 1, "steps": []}
-        new_idx = mgr.append_macro(macro)
-        self.refresh_list()
-        EditMacroDialog(self.window, new_idx, self.save_and_refresh)
+        # 不预创建宏，传 None 让对话框以"新建"模式打开，点取消不会残留空宏
+        EditMacroDialog(self.window, None, self.save_and_refresh)
 
     def edit_selected(self):
         if mgr.is_any_registered():
