@@ -286,6 +286,37 @@ class MacroManager:
 mgr = MacroManager()
 
 
+def send_text_via_wmchar(text):
+    """通过 WM_CHAR 逐字符发送 Unicode 文本，不依赖剪贴板和输入法。"""
+    import ctypes
+    user32 = ctypes.windll.user32
+    try:
+        hwnd = user32.GetForegroundWindow()
+    except Exception:
+        hwnd = 0
+    if not hwnd:
+        # 无前台窗口时回退到剪贴板方式
+        _send_text_via_clipboard(text)
+        return
+    for ch in text:
+        user32.PostMessageW(hwnd, 0x0102, ord(ch), 0)
+
+
+def _send_text_via_clipboard(text):
+    """剪贴板回退方案：仅在前台窗口不可用时使用。"""
+    try:
+        import pyperclip
+    except ImportError:
+        return
+    old = pyperclip.paste()
+    try:
+        pyperclip.copy(text)
+        keyboard.send("ctrl+v")
+        time.sleep(0.15)
+    finally:
+        pyperclip.copy(old)
+
+
 def execute_steps(steps, repeat=1):
     for _ in range(repeat):
         for step in steps:
@@ -295,6 +326,8 @@ def execute_steps(steps, repeat=1):
                 return
             if t == "key":
                 keyboard.send(step["value"])
+            elif t == "text":
+                send_text_via_wmchar(step["value"])
             elif t == "mouse":
                 act = step["action"]
                 if act == "click":

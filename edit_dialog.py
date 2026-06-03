@@ -243,6 +243,9 @@ class EditMacroDialog:
             desc = "特殊: 全局停止"
         elif t == "key":
             desc = f"按键: {step['value']}"
+        elif t == "text":
+            text_preview = step['value'][:20] + ("…" if len(step['value']) > 20 else "")
+            desc = f"文本输入: {text_preview}"
         elif t == "mouse":
             act = step["action"]
             if act == "click":
@@ -329,7 +332,7 @@ class EditMacroDialog:
         ttk.Label(scrollable, text="步骤类型：").grid(row=row, column=0, sticky=tk.W, padx=(10, 0), pady=8)
         self.edit_type_var = tk.StringVar(value="按键")
         type_combo = ttk.Combobox(scrollable, textvariable=self.edit_type_var,
-                                  values=["按键", "等待", "鼠标"], state="readonly", width=10)
+                                  values=["按键", "等待", "鼠标", "文本输入"], state="readonly", width=10)
         type_combo.grid(row=row, column=1, sticky=tk.E, padx=(0, 10), pady=8)
         type_combo.bind("<<ComboboxSelected>>", self.on_edit_type_change)
         row += 1
@@ -348,6 +351,7 @@ class EditMacroDialog:
         self.edit_mouse_param_frame = ttk.Frame(self.edit_mouse_frame)
         self.edit_mouse_param_frame.pack(side=tk.LEFT, padx=5)
         self.edit_wait_entry = ttk.Entry(self.edit_value_frame, width=25)
+        self.edit_text_widget = tk.Text(self.edit_value_frame, height=3, width=25, wrap=tk.WORD)
 
         self.edit_hint = ttk.Label(scrollable, text="", foreground="gray")
         self.edit_hint.grid(row=row + 1, column=0, columnspan=2, sticky=tk.W, padx=10, pady=2)
@@ -407,6 +411,7 @@ class EditMacroDialog:
         self.edit_key_combo.set("")
         self.edit_wait_entry.delete(0, tk.END)
         self.edit_mouse_action.set("")
+        self.edit_text_widget.delete("1.0", tk.END)
         self.edit_delay_var.set("0")
         self.edit_ctrl.set(False)
         self.edit_alt.set(False)
@@ -421,12 +426,16 @@ class EditMacroDialog:
             self.edit_type_var.set("按键")
         elif typ == "wait":
             self.edit_type_var.set("等待")
+        elif typ == "text":
+            self.edit_type_var.set("文本输入")
         else:
             self.edit_type_var.set("鼠标")
         self.on_edit_type_change()
         if typ == "key":
             self.edit_key_combo.set(step["value"])
             self._parse_edit_key_modifiers(step["value"])
+        elif typ == "text":
+            self.edit_text_widget.insert("1.0", step.get("value", ""))
         elif typ == "mouse":
             act = step["action"]
             if act == "click":
@@ -459,11 +468,14 @@ class EditMacroDialog:
             typ = "wait"
         elif typ_text == "鼠标":
             typ = "mouse"
+        elif typ_text == "文本输入":
+            typ = "text"
         else:
             typ = "key"
         self.edit_key_combo.pack_forget()
         self.edit_mouse_frame.pack_forget()
         self.edit_wait_entry.pack_forget()
+        self.edit_text_widget.pack_forget()
         self.edit_mod_frame.grid_remove()
         self.edit_hint.config(text="")
         self.stop_mouse_tracking()
@@ -475,6 +487,10 @@ class EditMacroDialog:
         elif typ == "mouse":
             self.edit_mouse_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
             self.edit_hint.config(text="选择鼠标动作并设置参数")
+            self.delay_frame.grid()
+        elif typ == "text":
+            self.edit_text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            self.edit_hint.config(text="输入要发送的文本（支持中文）")
             self.delay_frame.grid()
         else:  # wait
             self.edit_wait_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -581,6 +597,12 @@ class EditMacroDialog:
                 messagebox.showerror("错误", "等待时间必须为数字（秒）")
                 return
             step = {"type": "wait", "value": value, "delay": delay}
+        elif typ_text == "文本输入":
+            value = self.edit_text_widget.get("1.0", "end-1c")
+            if not value:
+                messagebox.showerror("错误", "请输入要发送的文本")
+                return
+            step = {"type": "text", "value": value, "delay": delay}
         else:
             act = self.edit_mouse_action.get()
             if not act:
