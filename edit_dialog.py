@@ -99,6 +99,7 @@ class EditMacroDialog:
         scrollbar = ttk.Scrollbar(list_container, orient=tk.VERTICAL, command=self.steps_listbox.yview)
         self.steps_listbox.configure(yscrollcommand=scrollbar.set)
         self.steps_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.steps_listbox.bind("<Double-1>", lambda e: self._on_step_double_click())
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         right_panel = ttk.Frame(steps_frame)
@@ -275,6 +276,8 @@ class EditMacroDialog:
         self.on_edit_type_change()
 
     def edit_step(self):
+        if "steps" in self.macro.get("locked", []):
+            return
         sel = self.steps_listbox.curselection()
         if not sel:
             messagebox.showinfo("提示", "请先选择一个步骤")
@@ -283,6 +286,10 @@ class EditMacroDialog:
         step = self.macro["steps"][self.current_step_index]
         self._load_step_to_edit(step)
         self._show_editor()
+
+    def _on_step_double_click(self):
+        """双击步骤列表项，相当于点击编辑步骤按钮。"""
+        self.edit_step()
 
     def delete_step(self):
         sel = self.steps_listbox.curselection()

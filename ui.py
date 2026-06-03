@@ -250,6 +250,8 @@ class ClassicPanel:
     def on_click(self, event):
         region = self.tree.identify_region(event.x, event.y)
         if region == "cell" and self.tree.identify_column(event.x) == "#1":
+            if mgr.is_any_registered():
+                return
             item = self.tree.identify_row(event.y)
             if item:
                 idx = int(item)
@@ -263,6 +265,8 @@ class ClassicPanel:
                     self.tree.set(item, column="#1", value="☑" if new_val else "☐")
 
     def on_double_click(self, event):
+        if mgr.is_any_registered():
+            return
         idx = self.get_selected_index()
         if idx is not None:
             EditMacroDialog(self.window, idx, self.save_and_refresh)
