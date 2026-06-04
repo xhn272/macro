@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """关于对话框的文本内容，方便独立修改版本号"""
 
-ABOUT_TEXT = """按键宏管理器
+from constants import VERSION
+
+ABOUT_TEXT = f"""按键宏管理器 v{VERSION}
 
 一个用于自定义键盘宏的便捷工具，支持鼠标操作和循环执行。
 
