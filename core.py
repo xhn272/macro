@@ -24,6 +24,7 @@ class MacroManager:
         self.hotkeys = {}
         self.registered = set()
         self._lock = threading.Lock()
+        self._change_callbacks = []
 
     def load(self):
         with self._lock:
@@ -226,7 +227,7 @@ class MacroManager:
                     rep = macro.get("repeat", 1)
 
                     def action(s=steps, r=rep):
-                        execute_steps(s, r)
+                        threading.Thread(target=execute_steps, args=(s, r), daemon=True).start()
 
                     hid = keyboard.add_hotkey(trig, action)
                     self.hotkeys[trig] = hid
@@ -244,6 +245,17 @@ class MacroManager:
                 messagebox.showwarning("触发键无效", msg)
         return True
 
+    def add_change_callback(self, cb):
+        """注册状态变更回调（热键注销时调用）。回调可能在非主线程执行。"""
+        self._change_callbacks.append(cb)
+
+    def _notify_change(self):
+        for cb in self._change_callbacks:
+            try:
+                cb()
+            except Exception:
+                pass
+
     def unregister_all(self):
         with self._lock:
             for _, hid in list(self.hotkeys.items()):
@@ -253,6 +265,7 @@ class MacroManager:
                     log_error(f"取消注册热键失败: {e}")
             self.hotkeys.clear()
             self.registered.clear()
+        self._notify_change()
 
     def register_single(self, index):
         with self._lock:
@@ -262,7 +275,7 @@ class MacroManager:
             rep = macro.get("repeat", 1)
 
             def action(s=steps, r=rep):
-                execute_steps(s, r)
+                threading.Thread(target=execute_steps, args=(s, r), daemon=True).start()
 
             hid = keyboard.add_hotkey(trigger, action)
             self.hotkeys[trigger] = hid
@@ -284,6 +297,9 @@ class MacroManager:
 
 
 mgr = MacroManager()
+
+# 取消标志：STOPALL 置位后，所有正在执行的宏在下一步检查时立即退出
+_cancel_event = threading.Event()
 
 
 def send_text_via_wmchar(text):
@@ -318,10 +334,14 @@ def _send_text_via_clipboard(text):
 
 
 def execute_steps(steps, repeat=1):
+    _cancel_event.clear()
     for _ in range(repeat):
         for step in steps:
+            if _cancel_event.is_set():
+                return
             t = step["type"]
             if t == "STOPALL":
+                _cancel_event.set()
                 mgr.unregister_all()
                 return
             if t == "key":

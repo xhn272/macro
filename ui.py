@@ -74,6 +74,9 @@ class MainWindow:
         self.classic_panel.refresh_list()
         self._update_view_menu()
 
+        # 热键注销时自动刷新 UI（STOPALL 等在后台线程触发）
+        mgr.add_change_callback(lambda: self.window.after_idle(self.current_panel.refresh_list))
+
     def _build_menubar(self):
         menubar = tk.Menu(self.window)
 
@@ -114,16 +117,28 @@ class MainWindow:
             return
         mgr.unregister_all()
         self.search_visible.set(False)
+
+        # 保存经典模式窗口尺寸
+        if self.current_mode == "classic":
+            self._classic_geometry = self.window.geometry()
+
+        # 隐藏当前面板
         if self.current_mode == "classic":
             self.classic_panel.hide()
         else:
             self.simple_panel.hide()
+
+        # 显示新面板并适配窗口大小
         if mode == "classic":
             self.classic_panel.show()
             self.classic_panel.refresh_list()
+            geo = getattr(self, '_classic_geometry', None)
+            self.window.geometry(geo if geo else "850x500")
         else:
             self.simple_panel.show()
             self.simple_panel.refresh_list()
+            self.window.geometry("500x360")
+
         self.current_mode = mode
         self._update_view_menu()
 
