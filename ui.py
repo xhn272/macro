@@ -21,9 +21,14 @@ class SearchBar:
         self.frame.pack(fill=tk.X, pady=(0, 5))
         ttk.Label(self.frame, text="搜索:").pack(side=tk.LEFT, padx=(0, 5))
         self.var = tk.StringVar()
-        self.var.trace("w", lambda *a: on_change())
-        entry = ttk.Entry(self.frame, textvariable=self.var)
-        entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.entry = ttk.Entry(self.frame, textvariable=self.var)
+        self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        def on_change_preserve_focus(*a):
+            on_change()
+            self.entry.focus_set()
+
+        self.var.trace("w", on_change_preserve_focus)
         ttk.Button(self.frame, text="X", width=2, command=self.clear).pack(side=tk.LEFT, padx=(5, 0))
         self.before_widget = before_widget
         self.frame.pack_forget()
@@ -37,6 +42,9 @@ class SearchBar:
     def hide(self):
         self.frame.pack_forget()
         self.var.set("")
+
+    def focus(self):
+        self.entry.focus_set()
 
 
 # ---------- 主窗口 ----------
@@ -90,6 +98,8 @@ class MainWindow:
         menubar.add_cascade(label="帮助", menu=help_menu)
 
         self.window.config(menu=menubar)
+        self.window.event_add('<<Find>>', '<Control-f>', '<Control-F>')
+        self.window.bind_all('<<Find>>', lambda e: self.show_search())
 
     def _update_view_menu(self):
         self.view_menu.entryconfig("经典", state=tk.DISABLED if self.current_mode == "classic" else tk.NORMAL)
@@ -125,6 +135,11 @@ class MainWindow:
 
     def toggle_search(self):
         self.current_panel.toggle_search()
+
+    def show_search(self):
+        self.search_visible.set(True)
+        self.current_panel.toggle_search()
+        self.current_panel.search_bar.focus()
 
     def show_about(self):
         messagebox.showinfo("关于", ABOUT_TEXT, parent=self.window)
