@@ -100,6 +100,11 @@ class EditMacroDialog:
         self.steps_listbox.configure(yscrollcommand=scrollbar.set)
         self.steps_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.steps_listbox.bind("<Double-1>", lambda e: self._on_step_double_click())
+        self.steps_listbox.bind("<ButtonPress-1>", self._on_drag_start)
+        self.steps_listbox.bind("<B1-Motion>", self._on_drag_motion)
+        self.steps_listbox.bind("<ButtonRelease-1>", self._on_drag_end)
+        self.steps_listbox.bind("<Leave>", self._on_drag_cancel)
+        self._drag_start_idx = None
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         right_panel = ttk.Frame(steps_frame)
@@ -317,6 +322,53 @@ class EditMacroDialog:
         self.macro["steps"][idx], self.macro["steps"][idx + 1] = self.macro["steps"][idx + 1], self.macro["steps"][idx]
         self.refresh_steps_list()
         self.steps_listbox.selection_set(idx + 1)
+
+    # ── 拖拽排序 ──
+    def _on_drag_start(self, event):
+        idx = self.steps_listbox.nearest(event.y)
+        if idx < 0 or idx >= len(self.macro["steps"]):
+            return
+        self._drag_start_idx = idx
+        self._drag_cur_idx = idx
+        self.steps_listbox.selection_clear(0, tk.END)
+        self.steps_listbox.selection_set(idx)
+        self.steps_listbox.config(cursor="hand2")
+
+    def _on_drag_motion(self, event):
+        if self._drag_start_idx is None:
+            return
+        target = self.steps_listbox.nearest(event.y)
+        if target < 0 or target >= len(self.macro["steps"]):
+            return
+        if target == self._drag_cur_idx:
+            return
+
+        # 数据模型中移动
+        step = self.macro["steps"].pop(self._drag_cur_idx)
+        self.macro["steps"].insert(target, step)
+
+        # 列表框中同步移动（增量更新，不重建）
+        text = self.steps_listbox.get(self._drag_cur_idx)
+        self.steps_listbox.delete(self._drag_cur_idx)
+        self.steps_listbox.insert(target, text)
+        self.steps_listbox.selection_set(target)
+
+        self._drag_cur_idx = target
+
+    def _on_drag_end(self, event):
+        if self._drag_start_idx is None:
+            return
+        self.steps_listbox.config(cursor="")
+        if self._drag_cur_idx != self._drag_start_idx:
+            self.refresh_steps_list()
+            self.steps_listbox.selection_set(self._drag_cur_idx)
+        self._drag_start_idx = None
+
+    def _on_drag_cancel(self, event):
+        if self._drag_start_idx is not None:
+            self.steps_listbox.config(cursor="")
+            self.refresh_steps_list()
+        self._drag_start_idx = None
 
     def _build_step_editor(self, parent):
         canvas = tk.Canvas(parent, highlightthickness=0)
