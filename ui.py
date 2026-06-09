@@ -548,9 +548,6 @@ class SimplePanel:
         macro = mgr.get_macro(idx)
         if macro is None:
             return
-        if "selected" in macro.get("locked", []):
-            messagebox.showwarning("操作被禁止", f'宏"{macro["name"]}"已被锁定，无法更改启用状态。')
-            return
         trigger = macro.get("trigger")
         if not trigger:
             messagebox.showerror("错误", "该宏未设置触发键，无法启用")
@@ -588,9 +585,6 @@ class SimplePanel:
         idx = int(sel[0])
         macro = mgr.get_macro(idx)
         if macro is None:
-            return
-        if "selected" in macro.get("locked", []):
-            messagebox.showwarning("操作被禁止", f'宏"{macro["name"]}"已被锁定，无法更改启用状态。')
             return
         mgr.unregister_single(idx)
         self._update_macro_status(idx)

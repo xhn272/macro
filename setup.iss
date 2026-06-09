@@ -20,7 +20,7 @@
   #define AppNameEn "macro"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.1.0"
+  #define AppVersion "1.3.0"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "xhn272"
@@ -84,8 +84,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
-; 程序所有文件
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 排除 macros.json，避免升级时覆盖用户的宏配置
+Source: "{#SourceDir}\*"; DestDir: "{app}"; \
+  Flags: ignoreversion recursesubdirs createallsubdirs; \
+  Excludes: "macros.json"
+; macros.json 仅首次安装时写入（升级不覆盖）
+Source: "{#SourceDir}\macros.json"; DestDir: "{app}"; \
+  Flags: onlyifdoesntexist ignoreversion
 
 [Icons]
 ; 开始菜单快捷方式
