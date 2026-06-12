@@ -47,6 +47,30 @@ class SearchBar:
         self.entry.focus_set()
 
 
+def _refresh_treeview(tree, search_bar, make_values):
+    """Treeview 增量刷新：遍历宏列表，按需增删改条目。
+
+    make_values(idx, macro, registered) -> tuple — 生成 values 元组。
+    """
+    filter_text = search_bar.var.get().strip().lower()
+    macros, registered = mgr.get_snapshot()
+    existing = set(tree.get_children())
+    for idx, m in enumerate(macros):
+        if filter_text and filter_text not in m["name"].lower():
+            continue
+        iid = str(idx)
+        tag = "selected" if idx in registered else "disabled"
+        values = make_values(idx, m, registered)
+        if iid in existing:
+            if tree.item(iid, "values") != values or tree.item(iid, "tags") != (tag,):
+                tree.item(iid, values=values, tags=(tag,))
+            existing.discard(iid)
+        else:
+            tree.insert("", tk.END, iid=iid, values=values, tags=(tag,))
+    for iid in existing:
+        tree.delete(iid)
+
+
 # ---------- 主窗口 ----------
 class MainWindow:
     """拥有单一 Tk 实例，管理经典/简约两个面板的切换。"""
@@ -249,25 +273,10 @@ class ClassicPanel:
         self.container.pack_forget()
 
     def refresh_list(self):
-        filter_text = self.search_bar.var.get().strip().lower()
-        macros, registered = mgr.get_snapshot()
-        existing = set(self.tree.get_children())
-        for idx, m in enumerate(macros):
-            if filter_text and filter_text not in m["name"].lower():
-                continue
-            iid = str(idx)
+        def make_values(idx, m, registered):
             check = "☑" if m.get("selected", True) else "☐"
-            steps_cnt = len(m.get("steps", []))
-            tag = "selected" if idx in registered else "disabled"
-            values = (check, m["name"], m["trigger"], steps_cnt)
-            if iid in existing:
-                if self.tree.item(iid, "values") != values or self.tree.item(iid, "tags") != (tag,):
-                    self.tree.item(iid, values=values, tags=(tag,))
-                existing.discard(iid)
-            else:
-                self.tree.insert("", tk.END, iid=iid, values=values, tags=(tag,))
-        for iid in existing:
-            self.tree.delete(iid)
+            return check, m["name"], m["trigger"], len(m.get("steps", []))
+        _refresh_treeview(self.tree, self.search_bar, make_values)
 
     def save_and_refresh(self):
         mgr.save()
@@ -486,23 +495,9 @@ class SimplePanel:
         return name
 
     def refresh_list(self):
-        filter_text = self.search_bar.var.get().strip().lower()
-        macros, registered = mgr.get_snapshot()
-        existing = set(self.tree.get_children())
-        for idx, m in enumerate(macros):
-            if filter_text and filter_text not in m["name"].lower():
-                continue
-            iid = str(idx)
-            tag = "selected" if idx in registered else "disabled"
-            values = (self._truncate_name(m["name"]),)
-            if iid in existing:
-                if self.tree.item(iid, "values") != values or self.tree.item(iid, "tags") != (tag,):
-                    self.tree.item(iid, values=values, tags=(tag,))
-                existing.discard(iid)
-            else:
-                self.tree.insert("", tk.END, iid=iid, values=values, tags=(tag,))
-        for iid in existing:
-            self.tree.delete(iid)
+        def make_values(idx, m, registered):
+            return (self._truncate_name(m["name"]),)
+        _refresh_treeview(self.tree, self.search_bar, make_values)
 
     def toggle_search(self):
         if self.main_window.search_visible.get():
