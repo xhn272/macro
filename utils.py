@@ -9,7 +9,7 @@ import platform
 from tkinter import messagebox
 
 
-def _parse_modifiers(key_str, ctrl_var, alt_var, shift_var, win_var):
+def parse_modifiers(key_str, ctrl_var, alt_var, shift_var, win_var):
     """Parse a hotkey string like 'ctrl+shift+a' and set the modifier checkboxes."""
     ctrl_var.set(False)
     alt_var.set(False)
@@ -31,7 +31,7 @@ def _parse_modifiers(key_str, ctrl_var, alt_var, shift_var, win_var):
                 win_var.set(True)
 
 
-def _build_modifier_key(current_key, ctrl_var, alt_var, shift_var, win_var):
+def build_modifier_key(current_key, ctrl_var, alt_var, shift_var, win_var):
     """Build a full hotkey string from a base key and modifier checkboxes."""
     if '+' in current_key:
         base = current_key.split('+')[-1].strip()
@@ -51,7 +51,7 @@ def _build_modifier_key(current_key, ctrl_var, alt_var, shift_var, win_var):
     return "+".join(mods) + "+" + base if mods else base
 
 
-def _prune_old_logs(log_dir, keep=50):
+def prune_old_logs(log_dir, keep=50):
     """保留最近 keep 个日志文件，删除更早的。"""
     try:
         files = [os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.endswith(".log")]
@@ -70,7 +70,7 @@ def log_error(msg):
         f.write(f"Python 版本：{sys.version}\n")
         f.write(f"平台：{platform.platform()}\n")
         f.write(f"\n{msg}")
-    _prune_old_logs("logs")
+    prune_old_logs("logs")
 
 
 def is_admin():

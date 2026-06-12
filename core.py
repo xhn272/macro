@@ -9,24 +9,30 @@ import threading
 import traceback
 import platform
 from tkinter import messagebox
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import keyboard
 import mouse
 
 from constants import CONFIG_FILE
-from utils import log_error, _prune_old_logs
+from utils import log_error, prune_old_logs
+
+# macro 数据是一个无 schema 的 dict，用类型别名便于阅读
+Macro = Dict[str, Any]
 
 
 class MacroManager:
-    def __init__(self, config_file=CONFIG_FILE):
-        self.config_file = config_file
-        self.macros = []
-        self.hotkeys = {}
-        self.registered = set()
-        self._lock = threading.Lock()
-        self._change_callbacks = []
+    """宏数据管理与热键注册的核心层，所有公共方法线程安全。"""
 
-    def load(self):
+    def __init__(self, config_file: str = CONFIG_FILE) -> None:
+        self.config_file = config_file
+        self.macros: List[Macro] = []
+        self.hotkeys: Dict[str, Any] = {}
+        self.registered: Set[int] = set()
+        self._lock = threading.Lock()
+        self._change_callbacks: List[Callable[[], None]] = []
+
+    def load(self) -> None:
         with self._lock:
             try:
                 if os.path.exists(self.config_file):
@@ -57,11 +63,11 @@ class MacroManager:
             except Exception as e:
                 messagebox.showerror("错误", f"加载配置失败：{e}")
 
-    def save(self):
+    def save(self) -> None:
         with self._lock:
             self._save_unlocked()
 
-    def _save_unlocked(self):
+    def _save_unlocked(self) -> None:
         """内部方法：不加锁，调用方需已持有 self._lock。"""
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
@@ -69,18 +75,18 @@ class MacroManager:
         except Exception as e:
             messagebox.showerror("错误", f"保存配置失败：{e}")
 
-    def _ensure_stopall_macro(self):
+    def _ensure_stopall_macro(self) -> None:
         with self._lock:
             self._ensure_stopall_unlocked()
 
-    def _ensure_stopall_unlocked(self):
+    def _ensure_stopall_unlocked(self) -> None:
         """内部方法：不加锁，调用方需已持有 self._lock。"""
         has_stopall = any(
             any(s.get("type") == "STOPALL" for s in m.get("steps", []))
             for m in self.macros
         )
         if not has_stopall:
-            stopall_macro = {
+            stopall_macro: Macro = {
                 "name": "全局停止",
                 "selected": True,
                 "trigger": "ctrl+delete",
@@ -91,7 +97,7 @@ class MacroManager:
             self.macros.insert(0, stopall_macro)
             self._save_unlocked()
 
-    def is_name_unique(self, name, exclude_index=None):
+    def is_name_unique(self, name: str, exclude_index: Optional[int] = None) -> bool:
         with self._lock:
             for i, m in enumerate(self.macros):
                 if i == exclude_index:
@@ -102,42 +108,42 @@ class MacroManager:
 
     # ── 线程安全的辅助方法（供 UI 层使用）──────────────────────────────
 
-    def get_snapshot(self):
+    def get_snapshot(self) -> Tuple[List[Macro], Set[int]]:
         """返回 macros 和 registered 的一致性快照，供 UI 只读遍历。"""
         with self._lock:
             return list(self.macros), set(self.registered)
 
-    def is_any_registered(self):
+    def is_any_registered(self) -> bool:
         with self._lock:
             return bool(self.registered)
 
-    def is_index_registered(self, idx):
+    def is_index_registered(self, idx: int) -> bool:
         with self._lock:
             return idx in self.registered
 
-    def has_hotkey(self, trigger):
+    def has_hotkey(self, trigger: str) -> bool:
         with self._lock:
             return trigger in self.hotkeys
 
-    def get_macro(self, idx):
+    def get_macro(self, idx: int) -> Optional[Macro]:
         """返回指定索引宏的浅拷贝，避免外部直接持有内部引用。"""
         with self._lock:
             if 0 <= idx < len(self.macros):
                 return dict(self.macros[idx])
             return None
 
-    def is_field_locked(self, idx, field):
+    def is_field_locked(self, idx: int, field: str) -> bool:
         """检查指定宏的某个字段是否被锁定。索引越界返回 True。"""
         with self._lock:
             if 0 <= idx < len(self.macros):
                 return field in self.macros[idx].get("locked", [])
             return True
 
-    def get_macros_count(self):
+    def get_macros_count(self) -> int:
         with self._lock:
             return len(self.macros)
 
-    def append_macro(self, macro):
+    def append_macro(self, macro: Macro) -> int:
         """线程安全地追加宏，返回新索引。"""
         with self._lock:
             idx = len(self.macros)
@@ -145,14 +151,14 @@ class MacroManager:
             self._save_unlocked()
             return idx
 
-    def replace_macro(self, idx, macro):
+    def replace_macro(self, idx: int, macro: Macro) -> None:
         """线程安全地替换指定索引的宏。"""
         with self._lock:
             if 0 <= idx < len(self.macros):
                 self.macros[idx] = macro
                 self._save_unlocked()
 
-    def save_macro(self, idx, macro):
+    def save_macro(self, idx: Optional[int], macro: Macro) -> None:
         """线程安全地保存宏：idx 有效则替换，否则追加。"""
         with self._lock:
             if idx is not None and 0 <= idx < len(self.macros):
@@ -161,21 +167,21 @@ class MacroManager:
                 self.macros.append(macro)
             self._save_unlocked()
 
-    def remove_macro(self, idx):
+    def remove_macro(self, idx: int) -> None:
         """线程安全地删除宏。"""
         with self._lock:
             if 0 <= idx < len(self.macros):
                 del self.macros[idx]
                 self._save_unlocked()
 
-    def update_selected(self, idx, selected):
+    def update_selected(self, idx: int, selected: bool) -> None:
         """线程安全地更新宏的选中状态。"""
         with self._lock:
             if 0 <= idx < len(self.macros):
                 self.macros[idx]["selected"] = selected
                 self._save_unlocked()
 
-    def toggle_selected(self, idx):
+    def toggle_selected(self, idx: int) -> Optional[bool]:
         """线程安全地翻转宏的选中状态，返回新值（None 表示索引无效或被锁定）。"""
         with self._lock:
             if 0 <= idx < len(self.macros):
@@ -187,7 +193,7 @@ class MacroManager:
 
     # ── 热键注册 / 注销 ──────────────────────────────────────────────
 
-    def register_all(self):
+    def register_all(self) -> bool:
         with self._lock:
             for _, hid in list(self.hotkeys.items()):
                 try:
@@ -197,13 +203,13 @@ class MacroManager:
             self.hotkeys.clear()
             self.registered.clear()
 
-            selected_list = []
+            selected_list: List[Tuple[int, Macro]] = []
             for idx, macro in enumerate(self.macros):
                 if macro.get("selected", True) and macro.get("trigger"):
                     selected_list.append((idx, macro))
 
-            trigger_map = {}
-            conflicts = []
+            trigger_map: Dict[str, Tuple[int, Macro]] = {}
+            conflicts: List[Tuple[str, str, str]] = []
             for idx, macro in selected_list:
                 trig = macro["trigger"]
                 if trig in trigger_map:
@@ -219,7 +225,7 @@ class MacroManager:
                 messagebox.showwarning("触发键冲突", msg)
                 return False
 
-            invalid = []
+            invalid: List[Tuple[str, str, str]] = []
             for idx, macro in selected_list:
                 trig = macro["trigger"]
                 try:
@@ -245,18 +251,18 @@ class MacroManager:
                 messagebox.showwarning("触发键无效", msg)
         return True
 
-    def add_change_callback(self, cb):
+    def add_change_callback(self, cb: Callable[[], None]) -> None:
         """注册状态变更回调（热键注销时调用）。回调可能在非主线程执行。"""
         self._change_callbacks.append(cb)
 
-    def _notify_change(self):
+    def _notify_change(self) -> None:
         for cb in self._change_callbacks:
             try:
                 cb()
             except Exception:
                 pass
 
-    def unregister_all(self):
+    def unregister_all(self) -> None:
         with self._lock:
             for _, hid in list(self.hotkeys.items()):
                 try:
@@ -267,7 +273,7 @@ class MacroManager:
             self.registered.clear()
         self._notify_change()
 
-    def register_single(self, index):
+    def register_single(self, index: int) -> None:
         with self._lock:
             macro = self.macros[index]
             trigger = macro.get("trigger")
@@ -282,7 +288,7 @@ class MacroManager:
             self.registered.add(index)
             print(f"简约模式：已注册 {trigger} -> {macro['name']}")
 
-    def unregister_single(self, index):
+    def unregister_single(self, index: int) -> None:
         with self._lock:
             macro = self.macros[index]
             trigger = macro.get("trigger")
@@ -380,7 +386,7 @@ def setup_crash_handler():
             f.write(f"Python 版本：{sys.version}\n")
             f.write(f"平台：{platform.platform()}\n")
             f.write(f"\n{tb_text}")
-        _prune_old_logs(log_dir)
+        prune_old_logs(log_dir)
         sys.__excepthook__(exc_type, exc_value, exc_tb)
 
     sys.excepthook = crash_handler

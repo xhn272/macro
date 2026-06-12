@@ -9,7 +9,7 @@ import keyboard
 import mouse
 
 from constants import ALL_KEYS, MOUSE_ACTIONS, MOUSE_CLICK_MAP, MOUSE_CLICK_REVERSE
-from utils import _parse_modifiers, _build_modifier_key, log_error
+from utils import parse_modifiers, build_modifier_key, log_error
 from core import mgr
 
 
@@ -188,7 +188,7 @@ class EditMacroDialog:
             self.repeat_spinbox.config(state=tk.DISABLED)
 
     def parse_trigger_modifiers(self):
-        _parse_modifiers(self.trigger_var.get(), self.ctrl_var, self.alt_var, self.shift_var, self.win_var)
+        parse_modifiers(self.trigger_var.get(), self.ctrl_var, self.alt_var, self.shift_var, self.win_var)
 
     def _record_hotkey(self):
         record_dialog = tk.Toplevel(self.dialog)
@@ -234,7 +234,7 @@ class EditMacroDialog:
 
     def update_trigger_from_modifiers(self):
         current = self.trigger_combo.get().strip()
-        new = _build_modifier_key(current, self.ctrl_var, self.alt_var, self.shift_var, self.win_var)
+        new = build_modifier_key(current, self.ctrl_var, self.alt_var, self.shift_var, self.win_var)
         self.trigger_var.set(new)
 
     def refresh_steps_list(self):
@@ -371,32 +371,47 @@ class EditMacroDialog:
         self._drag_start_idx = None
 
     def _build_step_editor(self, parent):
+        canvas, scrollable = self._create_scrollable_canvas(parent)
+        scrollable.columnconfigure(1, weight=1)
+
+        row = self._build_type_selector(scrollable, 0)
+        self._build_value_widgets(scrollable, row)
+        self._build_hint_label(scrollable, row)
+        row = self._build_modifier_frame(scrollable, row + 2)
+        row = self._build_delay_input(scrollable, row + 1)
+        row = self._build_coord_label(scrollable, row + 1)
+        self._build_action_buttons(scrollable, row + 1)
+
+        self.mouse_tracking = False
+        self.after_id = None
+        self.edit_mouse_param_inner = None
+
+    # ── _build_step_editor 的子方法 ──
+
+    def _create_scrollable_canvas(self, parent):
         canvas = tk.Canvas(parent, highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=canvas.yview)
         scrollable = ttk.Frame(canvas)
 
         scrollable.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         win_id = canvas.create_window((0, 0), window=scrollable, anchor="nw")
-
-        # 让内层 Frame 宽度跟随 Canvas，避免内容被裁剪
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win_id, width=e.width))
-
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        return canvas, scrollable
 
-        scrollable.columnconfigure(1, weight=1)
-
-        row = 0
-        ttk.Label(scrollable, text="步骤类型：").grid(row=row, column=0, sticky=tk.W, padx=(10, 0), pady=8)
+    def _build_type_selector(self, parent, row):
+        ttk.Label(parent, text="步骤类型：").grid(row=row, column=0, sticky=tk.W, padx=(10, 0), pady=8)
         self.edit_type_var = tk.StringVar(value="按键")
-        type_combo = ttk.Combobox(scrollable, textvariable=self.edit_type_var,
-                                  values=["按键", "等待", "鼠标", "文本输入"], state="readonly", width=10)
-        type_combo.grid(row=row, column=1, sticky=tk.E, padx=(0, 10), pady=8)
-        type_combo.bind("<<ComboboxSelected>>", self.on_edit_type_change)
-        row += 1
+        combo = ttk.Combobox(parent, textvariable=self.edit_type_var,
+                             values=["按键", "等待", "鼠标", "文本输入"], state="readonly", width=10)
+        combo.grid(row=row, column=1, sticky=tk.E, padx=(0, 10), pady=8)
+        combo.bind("<<ComboboxSelected>>", self.on_edit_type_change)
+        return row + 1
 
-        self.edit_value_frame = ttk.Frame(scrollable)
+    def _build_value_widgets(self, parent, row):
+        self.edit_value_frame = ttk.Frame(parent)
         self.edit_value_frame.grid(row=row, column=0, columnspan=2, sticky=tk.W + tk.E, padx=10, pady=5)
         self.edit_value_frame.columnconfigure(0, weight=1)
 
@@ -412,47 +427,42 @@ class EditMacroDialog:
         self.edit_wait_entry = ttk.Entry(self.edit_value_frame, width=25)
         self.edit_text_widget = tk.Text(self.edit_value_frame, height=3, width=25, wrap=tk.WORD)
 
-        self.edit_hint = ttk.Label(scrollable, text="", foreground="gray")
+    def _build_hint_label(self, parent, row):
+        self.edit_hint = ttk.Label(parent, text="", foreground="gray")
         self.edit_hint.grid(row=row + 1, column=0, columnspan=2, sticky=tk.W, padx=10, pady=2)
 
-        row += 2
-        self.edit_mod_frame = ttk.Frame(scrollable)
+    def _build_modifier_frame(self, parent, row):
+        self.edit_mod_frame = ttk.Frame(parent)
         self.edit_mod_frame.grid(row=row, column=0, columnspan=2, sticky=tk.W, padx=10, pady=5)
         self.edit_ctrl = tk.BooleanVar()
         self.edit_alt = tk.BooleanVar()
         self.edit_shift = tk.BooleanVar()
         self.edit_win = tk.BooleanVar()
-        ttk.Checkbutton(self.edit_mod_frame, text="Ctrl", variable=self.edit_ctrl, command=self.update_edit_key).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Checkbutton(self.edit_mod_frame, text="Alt", variable=self.edit_alt, command=self.update_edit_key).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Checkbutton(self.edit_mod_frame, text="Shift", variable=self.edit_shift, command=self.update_edit_key).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Checkbutton(self.edit_mod_frame, text="Win", variable=self.edit_win, command=self.update_edit_key).pack(
-            side=tk.LEFT, padx=2)
+        for text, var in [("Ctrl", self.edit_ctrl), ("Alt", self.edit_alt),
+                          ("Shift", self.edit_shift), ("Win", self.edit_win)]:
+            ttk.Checkbutton(self.edit_mod_frame, text=text, variable=var,
+                            command=self.update_edit_key).pack(side=tk.LEFT, padx=2)
         self.edit_mod_frame.grid_remove()
+        return row
 
-        row += 1
-        self.delay_frame = ttk.Frame(scrollable)
+    def _build_delay_input(self, parent, row):
+        self.delay_frame = ttk.Frame(parent)
         self.delay_frame.grid(row=row, column=0, columnspan=2, sticky=tk.W, padx=10, pady=8)
         ttk.Label(self.delay_frame, text="执行后延迟(秒)：").pack(side=tk.LEFT)
         self.edit_delay_var = tk.StringVar(value="0")
-        delay_entry = ttk.Entry(self.delay_frame, textvariable=self.edit_delay_var, width=8)
-        delay_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(self.delay_frame, textvariable=self.edit_delay_var, width=8).pack(side=tk.LEFT, padx=5)
+        return row
 
-        row += 1
-        self.edit_coord_label = ttk.Label(scrollable, text="", foreground="blue")
+    def _build_coord_label(self, parent, row):
+        self.edit_coord_label = ttk.Label(parent, text="", foreground="blue")
         self.edit_coord_label.grid(row=row, column=0, columnspan=3, sticky=tk.W, padx=10, pady=2)
+        return row
 
-        row += 1
-        btn_frame = ttk.Frame(scrollable)
+    def _build_action_buttons(self, parent, row):
+        btn_frame = ttk.Frame(parent)
         btn_frame.grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=20, padx=10)
         ttk.Button(btn_frame, text="保存步骤", command=self.save_step).pack(side=tk.LEFT, padx=10)
         ttk.Button(btn_frame, text="取消编辑", command=self.cancel_edit).pack(side=tk.LEFT, padx=10)
-
-        self.mouse_tracking = False
-        self.after_id = None
-        self.edit_mouse_param_inner = None
 
     def _show_editor(self):
         self.right_placeholder.pack_forget()
@@ -585,13 +595,13 @@ class EditMacroDialog:
             self.edit_coord_label.config(text="")
 
     def _parse_edit_key_modifiers(self, key_str):
-        _parse_modifiers(key_str, self.edit_ctrl, self.edit_alt, self.edit_shift, self.edit_win)
+        parse_modifiers(key_str, self.edit_ctrl, self.edit_alt, self.edit_shift, self.edit_win)
 
     def update_edit_key(self):
         if self.edit_type_var.get() != "按键":
             return
         cur = self.edit_key_combo.get().strip()
-        new = _build_modifier_key(cur, self.edit_ctrl, self.edit_alt, self.edit_shift, self.edit_win)
+        new = build_modifier_key(cur, self.edit_ctrl, self.edit_alt, self.edit_shift, self.edit_win)
         self.edit_key_combo.set(new)
 
     def start_mouse_tracking(self):
