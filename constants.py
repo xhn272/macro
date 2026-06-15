@@ -3,7 +3,7 @@
 
 CONFIG_FILE = "macros.json"
 
-VERSION = "1.3.0"  # 不带 v 前缀，需与 git tag 和 build_release.cmd 保持同步
+VERSION = "1.3.2"  # 不带 v 前缀，需与 git tag 和 build_release.cmd 保持同步
 
 ALL_KEYS = [
     "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",

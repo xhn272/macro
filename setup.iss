@@ -20,7 +20,7 @@
   #define AppNameEn "macro"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.3.1"
+  #define AppVersion "1.3.2"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "xhn272"

@@ -8,7 +8,7 @@ setlocal enabledelayedexpansion
 :: ============================================================
 
 :: ---------- 配置 ----------
-set VERSION=1.3.0
+set VERSION=1.3.2
 set PROJECT_DIR=C:\Users\Administrator\PycharmProjects\macro
 set DESKTOP=C:\Users\Administrator\Desktop
 set PYTHON=%PROJECT_DIR%\.venv\Scripts\python.exe
