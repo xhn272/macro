@@ -17,6 +17,36 @@ import mouse
 from constants import CONFIG_FILE
 from utils import log_error, prune_old_logs
 
+# ── 键盘库扫描码冲突修复 ────────────────────────────────────────────
+# "." 映射到扫描码 (52, 83)，其中 83 也被 "delete" 使用。
+# 导致按 Delete 键会误触发"."热键。注册热键时临时过滤冲突的扫描码。
+_SCANCODE_CONFLICTS = {
+    '.': 83,       # 83 = 小键盘小数点/Delete 键共用扫描码
+    'period': 83,
+    'dot': 83,
+    'decimal': 83, # 录制小键盘 Del 键时 keyboard 返回 "decimal"
+}
+_original_key_to_scan_codes = keyboard.key_to_scan_codes
+
+
+def _filtered_key_to_scan_codes(key, error_if_missing=True):
+    codes = _original_key_to_scan_codes(key, error_if_missing)
+    if key in _SCANCODE_CONFLICTS:
+        filtered = tuple(c for c in codes if c != _SCANCODE_CONFLICTS[key])
+        if not filtered:
+            raise ValueError(f'触发键"{key}"不支持（扫描码与Delete键冲突），请换用其他按键。')
+        return filtered
+    return codes
+
+
+def _add_hotkey_safe(trigger: str, callback) -> Any:
+    """keyboard.add_hotkey 的包装，注册时过滤掉已知的扫描码冲突。"""
+    keyboard.key_to_scan_codes = _filtered_key_to_scan_codes
+    try:
+        return keyboard.add_hotkey(trigger, callback)
+    finally:
+        keyboard.key_to_scan_codes = _original_key_to_scan_codes
+
 # macro 数据是一个无 schema 的 dict，用类型别名便于阅读
 Macro = Dict[str, Any]
 
@@ -233,9 +263,13 @@ class MacroManager:
                     rep = macro.get("repeat", 1)
 
                     def action(s=steps, r=rep):
+                        if _executing.is_set() and not any(
+                            s2.get("type") == "STOPALL" for s2 in s
+                        ):
+                            return
                         threading.Thread(target=execute_steps, args=(s, r), daemon=True).start()
 
-                    hid = keyboard.add_hotkey(trig, action)
+                    hid = _add_hotkey_safe(trig, action)
                     self.hotkeys[trig] = hid
                     self.registered.add(idx)
                     print(f"已注册：{trig} -> {macro['name']}")
@@ -281,9 +315,11 @@ class MacroManager:
             rep = macro.get("repeat", 1)
 
             def action(s=steps, r=rep):
+                if _executing.is_set():
+                    return
                 threading.Thread(target=execute_steps, args=(s, r), daemon=True).start()
 
-            hid = keyboard.add_hotkey(trigger, action)
+            hid = _add_hotkey_safe(trigger, action)
             self.hotkeys[trigger] = hid
             self.registered.add(index)
             print(f"简约模式：已注册 {trigger} -> {macro['name']}")
@@ -306,6 +342,8 @@ mgr = MacroManager()
 
 # 取消标志：STOPALL 置位后，所有正在执行的宏在下一步检查时立即退出
 _cancel_event = threading.Event()
+# 执行标志：宏步骤执行期间置位，防止合成按键事件误触发其他宏（修饰键状态污染）
+_executing = threading.Event()
 
 
 def send_text_via_wmchar(text):
@@ -341,36 +379,40 @@ def _send_text_via_clipboard(text):
 
 def execute_steps(steps, repeat=1):
     _cancel_event.clear()
-    for _ in range(repeat):
-        for step in steps:
-            if _cancel_event.is_set():
-                return
-            t = step["type"]
-            if t == "STOPALL":
-                _cancel_event.set()
-                mgr.unregister_all()
-                return
-            if t == "key":
-                keyboard.send(step["value"])
-            elif t == "text":
-                send_text_via_wmchar(step["value"])
-            elif t == "mouse":
-                act = step["action"]
-                if act == "click":
-                    btn = step.get("button", "left")
-                    clicks = step.get("clicks", 1)
-                    for _ in range(clicks):
-                        mouse.click(btn)
-                        if clicks > 1:
-                            time.sleep(0.05)
-                elif act == "move":
-                    mouse.move(step.get("x", 0), step.get("y", 0))
-                elif act == "scroll":
-                    mouse.wheel(step.get("dy", 0))
-            elif t == "wait":
-                time.sleep(float(step["value"]))
-            if step.get("delay", 0) > 0:
-                time.sleep(step["delay"])
+    _executing.set()
+    try:
+        for _ in range(repeat):
+            for step in steps:
+                if _cancel_event.is_set():
+                    return
+                t = step["type"]
+                if t == "STOPALL":
+                    _cancel_event.set()
+                    mgr.unregister_all()
+                    return
+                if t == "key":
+                    keyboard.send(step["value"])
+                elif t == "text":
+                    send_text_via_wmchar(step["value"])
+                elif t == "mouse":
+                    act = step["action"]
+                    if act == "click":
+                        btn = step.get("button", "left")
+                        clicks = step.get("clicks", 1)
+                        for _ in range(clicks):
+                            mouse.click(btn)
+                            if clicks > 1:
+                                time.sleep(0.05)
+                    elif act == "move":
+                        mouse.move(step.get("x", 0), step.get("y", 0))
+                    elif act == "scroll":
+                        mouse.wheel(step.get("dy", 0))
+                elif t == "wait":
+                    time.sleep(float(step["value"]))
+                if step.get("delay", 0) > 0:
+                    time.sleep(step["delay"])
+    finally:
+        _executing.clear()
 
 
 def setup_crash_handler():

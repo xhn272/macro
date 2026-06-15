@@ -219,6 +219,13 @@ class EditMacroDialog:
             if record_dialog.winfo_exists():
                 record_dialog.destroy()
             if result[0]:
+                if result[0] == "decimal":
+                    messagebox.showwarning("录制提示",
+                        "小键盘 Del 键不支持作为触发键（其扫描码与主键盘 Delete 键冲突）。\n"
+                        "如需使用 Del 功能，请按主键盘的 Delete 键。\n"
+                        "如需输入小数点，请按主键盘的 . 键。",
+                        parent=self.dialog)
+                    return
                 self.trigger_var.set(result[0])
                 self.parse_trigger_modifiers()
                 self.update_trigger_from_modifiers()
