@@ -84,9 +84,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
-; 排除 macros.json，避免升级时覆盖用户的宏配置
+; 排除运行时生成的文件和用户配置，避免升级时覆盖
 Source: "{#SourceDir}\*"; DestDir: "{app}"; \
-  Flags: ignoreversion recursesubdirs createallsubdirs
+  Flags: ignoreversion recursesubdirs createallsubdirs; \
+  Excludes: "macros.json, config.json, macros.json.bak, logs, backups"
 
 [Icons]
 ; 开始菜单快捷方式

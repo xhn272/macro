@@ -56,7 +56,7 @@ echo.
 echo [4/5] 构建安装包...
 if not exist "%ISCC%" goto :skip_iscc
 echo        正在编译 Inno Setup 安装包...
-call "%ISCC%" /Qp "%PROJECT_DIR%\setup.iss"
+call "%ISCC%" /Qp /DSourceDir=%DESKTOP%\macro.dist /DAppVersion=%VERSION% "%PROJECT_DIR%\setup.iss"
 if errorlevel 1 goto :error_iscc
 echo        安装包构建完成.
 goto :after_iscc
