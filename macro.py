@@ -6,6 +6,7 @@
 
 import threading
 
+from config import config as app_config
 from core import setup_crash_handler
 from ui import MainWindow
 from update_checker import check_for_updates
@@ -15,9 +16,10 @@ def main():
     setup_crash_handler()
     app = MainWindow()
     # 启动后 1.5 秒在后台线程检查更新，不阻塞 UI
-    app.window.after(1500, lambda: threading.Thread(
-        target=check_for_updates, args=(app.window,), daemon=True
-    ).start())
+    if app_config.get("check_update"):
+        app.window.after(1500, lambda: threading.Thread(
+            target=check_for_updates, args=(app.window,), daemon=True
+        ).start())
     app.window.mainloop()
 
 

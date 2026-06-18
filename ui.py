@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from about_text import ABOUT_TEXT
+from config import config as app_config
 from core import mgr
 from edit_dialog import EditMacroDialog
 from utils import check_admin_gui, log_error
@@ -71,6 +72,52 @@ def _refresh_treeview(tree, search_bar, make_values):
         tree.delete(iid)
 
 
+# ---------- 设置对话框 ----------
+class SettingsDialog:
+    """独立的设置窗口，允许用户修改可配置项并持久化到 config.json。"""
+
+    def __init__(self, parent):
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("设置")
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        self.dialog.resizable(False, False)
+
+        main = ttk.Frame(self.dialog, padding="10")
+        main.pack(fill=tk.BOTH, expand=True)
+
+        self.check_update_var = tk.BooleanVar(value=app_config.get("check_update"))
+        ttk.Checkbutton(main, text="启动时检查更新", variable=self.check_update_var).pack(
+            anchor=tk.W, pady=5)
+
+        log_frame = ttk.Frame(main)
+        log_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(log_frame, text="日志保留数量：").pack(side=tk.LEFT)
+        self.log_keep_var = tk.IntVar(value=app_config.get("log_keep"))
+        ttk.Spinbox(log_frame, from_=1, to=999, textvariable=self.log_keep_var,
+                    width=6).pack(side=tk.LEFT, padx=5)
+        ttk.Label(log_frame, text="个").pack(side=tk.LEFT)
+
+        note = ttk.Label(main, text="注：宏配置文件路径需直接编辑 config.json 修改。",
+                         foreground="gray")
+        note.pack(anchor=tk.W, pady=(10, 0))
+
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(pady=(15, 0))
+        ttk.Button(btn_frame, text="保存", command=self.save, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="取消", command=self.dialog.destroy,
+                   width=10).pack(side=tk.LEFT, padx=5)
+
+        self.dialog.bind("<Return>", lambda e: self.save())
+        self.dialog.bind("<Escape>", lambda e: self.dialog.destroy())
+
+    def save(self):
+        app_config.set("check_update", self.check_update_var.get())
+        app_config.set("log_keep", self.log_keep_var.get())
+        app_config.save()
+        self.dialog.destroy()
+
+
 # ---------- 主窗口 ----------
 class MainWindow:
     """拥有单一 Tk 实例，管理经典/简约两个面板的切换。"""
@@ -105,6 +152,7 @@ class MainWindow:
         menubar = tk.Menu(self.window)
 
         file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="设置", command=self.show_settings)
         file_menu.add_command(label="重新加载配置", command=self.reload_config)
         file_menu.add_separator()
         file_menu.add_command(label="退出", command=self.quit_app)
@@ -182,6 +230,9 @@ class MainWindow:
 
     def show_about(self):
         messagebox.showinfo("关于", ABOUT_TEXT, parent=self.window)
+
+    def show_settings(self):
+        SettingsDialog(self.window)
 
     def _on_tk_error(self, exc_type, exc_value, exc_tb):
         tb_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))

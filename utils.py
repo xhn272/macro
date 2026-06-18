@@ -51,8 +51,13 @@ def build_modifier_key(current_key, ctrl_var, alt_var, shift_var, win_var):
     return "+".join(mods) + "+" + base if mods else base
 
 
-def prune_old_logs(log_dir, keep=50):
+from config import config as app_config
+
+
+def prune_old_logs(log_dir, keep=None):
     """保留最近 keep 个日志文件，删除更早的。"""
+    if keep is None:
+        keep = app_config.get("log_keep")
     try:
         files = [os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.endswith(".log")]
         files.sort(key=os.path.getmtime, reverse=True)

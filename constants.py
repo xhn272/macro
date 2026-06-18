@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """常量定义：按键列表、鼠标动作、宏配置文件名等数据。"""
 
-CONFIG_FILE = "macros.json"
-
 VERSION = "1.3.2"  # 不带 v 前缀，需与 git tag 和 build_release.cmd 保持同步
 
 ALL_KEYS = [

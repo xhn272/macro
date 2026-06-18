@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import keyboard
 import mouse
 
-from constants import CONFIG_FILE
+from config import config as app_config
 from utils import log_error, prune_old_logs
 
 # ── 键盘库扫描码冲突修复 ────────────────────────────────────────────
@@ -54,7 +54,9 @@ Macro = Dict[str, Any]
 class MacroManager:
     """宏数据管理与热键注册的核心层，所有公共方法线程安全。"""
 
-    def __init__(self, config_file: str = CONFIG_FILE) -> None:
+    def __init__(self, config_file: str = "") -> None:
+        if not config_file:
+            config_file = app_config.get("macros_file")
         self.config_file = config_file
         self.macros: List[Macro] = []
         self.hotkeys: Dict[str, Any] = {}

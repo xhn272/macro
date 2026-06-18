@@ -1,0 +1,5 @@
+{
+    "check_update": true,
+    "log_keep": 50,
+    "macros_file": "macros.json"
+}
