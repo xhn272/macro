@@ -10,3 +10,5 @@ upx-5.1.1-win64/
 *.iss
 backups/
 release/
+macros.json
+config.json
