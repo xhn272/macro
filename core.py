@@ -3,6 +3,7 @@
 
 import json
 import os
+import shutil
 import sys
 import time
 import threading
@@ -63,6 +64,8 @@ class MacroManager:
         self.registered: Set[int] = set()
         self._lock = threading.Lock()
         self._change_callbacks: List[Callable[[], None]] = []
+        self._last_backup_time = 0.0
+        self._backup_cooldown = 60  # 秒
 
     def load(self) -> None:
         with self._lock:
@@ -101,11 +104,79 @@ class MacroManager:
 
     def _save_unlocked(self) -> None:
         """内部方法：不加锁，调用方需已持有 self._lock。"""
+        self._auto_backup()
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(self.macros, f, indent=4, ensure_ascii=False)
         except Exception as e:
             messagebox.showerror("错误", f"保存配置失败：{e}")
+
+    # ── 自动备份与恢复 ──────────────────────────────────────────────
+
+    def _backup_dir(self) -> str:
+        return os.path.join(os.path.dirname(os.path.abspath(self.config_file)), "backups")
+
+    def _auto_backup(self) -> None:
+        """60 秒冷却期内跳过，避免批量操作产生大量备份文件。"""
+        if not os.path.exists(self.config_file):
+            return
+        now = time.time()
+        if now - self._last_backup_time < self._backup_cooldown:
+            return
+        self._last_backup_time = now
+        self._do_backup()
+
+    def force_backup(self) -> None:
+        """强制备份（恢复操作前调用），绕过冷却期。"""
+        if not os.path.exists(self.config_file):
+            return
+        self._last_backup_time = time.time()
+        self._do_backup()
+
+    def _do_backup(self) -> None:
+        backup_dir = self._backup_dir()
+        try:
+            os.makedirs(backup_dir, exist_ok=True)
+            timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+            backup_name = f"macros_{timestamp}.json.bak"
+            shutil.copy2(self.config_file, os.path.join(backup_dir, backup_name))
+            self._prune_backups()
+        except OSError:
+            pass
+
+    def _prune_backups(self) -> None:
+        keep = app_config.get("backup_keep")
+        backup_dir = self._backup_dir()
+        try:
+            files = sorted(
+                [f for f in os.listdir(backup_dir) if f.endswith(".json.bak")],
+                key=lambda f: os.path.getmtime(os.path.join(backup_dir, f)),
+                reverse=True,
+            )
+            for f in files[keep:]:
+                os.remove(os.path.join(backup_dir, f))
+        except OSError:
+            pass
+
+    def restore_from_file(self, file_path: str) -> bool:
+        """从备份文件恢复宏配置。校验通过后替换内存宏列表并保存。返回 True 成功。"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            raise ValueError(f"无法读取文件：{e}")
+
+        if not isinstance(data, list):
+            raise ValueError("文件格式不正确：根元素应为列表")
+        for m in data:
+            if not isinstance(m, dict):
+                raise ValueError("文件格式不正确：宏条目应为对象")
+
+        with self._lock:
+            self.force_backup()
+            self.macros = data
+            self._save_unlocked()
+        return True
 
     def _ensure_stopall_macro(self) -> None:
         with self._lock:

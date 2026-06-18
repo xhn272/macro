@@ -106,6 +106,16 @@ class SettingsDialog:
         ttk.Button(log_btn_frame, text="清理所有日志", command=self.clear_logs).pack(
             side=tk.LEFT)
 
+        backup_frame = ttk.Frame(main)
+        backup_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(backup_frame, text="备份保留数量：").pack(side=tk.LEFT)
+        self.backup_keep_var = tk.IntVar(value=app_config.get("backup_keep"))
+        ttk.Spinbox(backup_frame, from_=1, to=99, textvariable=self.backup_keep_var,
+                    width=6).pack(side=tk.LEFT, padx=5)
+        ttk.Label(backup_frame, text="份").pack(side=tk.LEFT)
+        ttk.Button(backup_frame, text="立即备份", command=self.manual_backup).pack(
+            side=tk.RIGHT, padx=(5, 0))
+
         note = ttk.Label(main, text="注：宏配置文件路径需直接编辑 config.json 修改。",
                          foreground="gray")
         note.pack(anchor=tk.W, pady=(10, 0))
@@ -124,6 +134,7 @@ class SettingsDialog:
     def save(self):
         app_config.set("check_update", self.check_update_var.get())
         app_config.set("log_keep", self.log_keep_var.get())
+        app_config.set("backup_keep", self.backup_keep_var.get())
         app_config.save()
         self.dialog.destroy()
 
@@ -150,10 +161,16 @@ class SettingsDialog:
             os.remove(os.path.join(log_dir, f))
         messagebox.showinfo("提示", f"已清理 {len(files)} 个日志文件。", parent=self.dialog)
 
+    def manual_backup(self):
+        from core import mgr
+        mgr.force_backup()
+        messagebox.showinfo("提示", "备份完成。", parent=self.dialog)
+
     def restore_defaults(self):
         from config import DEFAULTS
         self.check_update_var.set(DEFAULTS["check_update"])
         self.log_keep_var.set(DEFAULTS["log_keep"])
+        self.backup_keep_var.set(DEFAULTS["backup_keep"])
 
 
 # ---------- 主窗口 ----------
@@ -192,6 +209,7 @@ class MainWindow:
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="设置", command=self.show_settings)
         file_menu.add_command(label="重新加载配置", command=self.reload_config)
+        file_menu.add_command(label="恢复配置...", command=self.restore_config)
         file_menu.add_separator()
         file_menu.add_command(label="退出", command=self.quit_app)
         menubar.add_cascade(label="文件", menu=file_menu)
@@ -279,6 +297,28 @@ class MainWindow:
 
     def show_settings(self):
         SettingsDialog(self.window)
+
+    def restore_config(self):
+        if mgr.is_any_registered():
+            messagebox.showwarning("操作被禁止", "请先停用所有宏后再恢复配置。")
+            return
+        file_path = tk.filedialog.askopenfilename(
+            title="选择备份文件",
+            initialdir=os.path.abspath("backups"),
+            filetypes=[("JSON 备份文件", "*.json.bak"), ("JSON 文件", "*.json"),
+                       ("所有文件", "*.*")],
+        )
+        if not file_path:
+            return
+        if not messagebox.askyesno("确认", "确定要恢复配置吗？\n\n当前所有宏将被替换为备份文件中的内容。",
+                                   parent=self.window):
+            return
+        try:
+            mgr.restore_from_file(file_path)
+            messagebox.showinfo("提示", "配置恢复成功。", parent=self.window)
+            self.current_panel.refresh_list()
+        except ValueError as e:
+            messagebox.showerror("错误", str(e), parent=self.window)
 
     def _on_tk_error(self, exc_type, exc_value, exc_tb):
         tb_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
