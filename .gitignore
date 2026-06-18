@@ -7,5 +7,6 @@ upx-5.1.1-win64/
 *.ico
 *.bat
 *.cmd
+*.iss
 backups/
 release/
