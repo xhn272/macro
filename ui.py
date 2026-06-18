@@ -2,6 +2,7 @@
 """主窗口界面：经典模式与简约模式两个面板的完整 GUI，支持模式切换与宏列表管理。"""
 
 import copy
+import os
 import sys
 import traceback
 import tkinter as tk
@@ -98,6 +99,13 @@ class SettingsDialog:
                     width=6).pack(side=tk.LEFT, padx=5)
         ttk.Label(log_frame, text="个").pack(side=tk.LEFT)
 
+        log_btn_frame = ttk.Frame(main)
+        log_btn_frame.pack(fill=tk.X, pady=(2, 0))
+        ttk.Button(log_btn_frame, text="打开日志目录", command=self.open_log_dir).pack(
+            side=tk.LEFT, padx=(0, 5))
+        ttk.Button(log_btn_frame, text="清理所有日志", command=self.clear_logs).pack(
+            side=tk.LEFT)
+
         note = ttk.Label(main, text="注：宏配置文件路径需直接编辑 config.json 修改。",
                          foreground="gray")
         note.pack(anchor=tk.W, pady=(10, 0))
@@ -106,6 +114,8 @@ class SettingsDialog:
         btn_frame.pack(pady=(15, 0))
         ttk.Button(btn_frame, text="保存", command=self.save, width=10).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="取消", command=self.dialog.destroy,
+                   width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="恢复默认", command=self.restore_defaults,
                    width=10).pack(side=tk.LEFT, padx=5)
 
         self.dialog.bind("<Return>", lambda e: self.save())
@@ -116,6 +126,34 @@ class SettingsDialog:
         app_config.set("log_keep", self.log_keep_var.get())
         app_config.save()
         self.dialog.destroy()
+
+    def open_log_dir(self):
+        log_dir = os.path.abspath("logs")
+        if os.path.isdir(log_dir):
+            os.startfile(log_dir)
+        else:
+            messagebox.showinfo("提示", "日志目录尚不存在。", parent=self.dialog)
+
+    def clear_logs(self):
+        log_dir = os.path.abspath("logs")
+        if not os.path.isdir(log_dir):
+            messagebox.showinfo("提示", "没有日志需要清理。", parent=self.dialog)
+            return
+        files = [f for f in os.listdir(log_dir) if f.endswith(".log")]
+        if not files:
+            messagebox.showinfo("提示", "没有日志需要清理。", parent=self.dialog)
+            return
+        if not messagebox.askyesno("确认", f"确定要删除所有 {len(files)} 个日志文件吗？",
+                                   parent=self.dialog):
+            return
+        for f in files:
+            os.remove(os.path.join(log_dir, f))
+        messagebox.showinfo("提示", f"已清理 {len(files)} 个日志文件。", parent=self.dialog)
+
+    def restore_defaults(self):
+        from config import DEFAULTS
+        self.check_update_var.set(DEFAULTS["check_update"])
+        self.log_keep_var.set(DEFAULTS["log_keep"])
 
 
 # ---------- 主窗口 ----------
@@ -229,7 +267,15 @@ class MainWindow:
         self.current_panel.search_bar.focus()
 
     def show_about(self):
-        messagebox.showinfo("关于", ABOUT_TEXT, parent=self.window)
+        macros, _ = mgr.get_snapshot()
+        info = ABOUT_TEXT + f"""
+
+运行信息：
+• 配置文件：{os.path.abspath(app_config.get('macros_file'))}
+• 日志目录：{os.path.abspath('logs')}
+• 宏数量：{len(macros)}
+• Python {sys.version}"""
+        messagebox.showinfo("关于", info, parent=self.window)
 
     def show_settings(self):
         SettingsDialog(self.window)
