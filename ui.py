@@ -324,10 +324,6 @@ class MainWindow:
                                        parent=self.window)
                 self.theme_var.set("default")
                 return
-        # 主题切换会重置字体，重新应用自定义字号
-        style = ttk.Style()
-        style.configure("Treeview", font=('TkDefaultFont', 12))
-        style.configure("Treeview.Heading", font=('TkDefaultFont', 12, 'bold'))
         app_config.set("theme", theme)
         app_config.save()
 
