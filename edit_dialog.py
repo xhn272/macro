@@ -8,9 +8,11 @@ from tkinter import messagebox, ttk
 import keyboard
 import mouse
 
+from config import config as app_config
 from constants import ALL_KEYS, MOUSE_ACTIONS, MOUSE_CLICK_MAP, MOUSE_CLICK_REVERSE
 from utils import parse_modifiers, build_modifier_key, log_error
 from core import mgr
+import theme
 
 
 class EditMacroDialog:
@@ -151,8 +153,23 @@ class EditMacroDialog:
         self.parse_trigger_modifiers()
         self._adjust_window_size()
         self._apply_locks()
+        self._apply_tk_theme()
 
     # ---------- 辅助方法 ----------
+    def _apply_tk_theme(self):
+        """根据当前主题配置 tk 原生控件的颜色。"""
+        name = app_config.get("theme")
+        c = theme.tk_widget_colors(name)
+        self.steps_listbox.config(bg=c["bg"], fg=c["fg"],
+                                  selectbackground=c["selectbackground"],
+                                  selectforeground=c["selectforeground"])
+        if hasattr(self, "edit_canvas"):
+            self.edit_canvas.config(bg=c["bg"])
+        if hasattr(self, "edit_text_widget"):
+            self.edit_text_widget.config(bg=c["entry_bg"] if name == "dark" else "white",
+                                         fg=c["fg"], insertbackground=c["insertbackground"])
+        self.dialog.config(bg=c["bg"])
+
     def _adjust_window_size(self):
         """动态调整窗口大小，确保左右内容完整显示"""
         try:
@@ -396,17 +413,18 @@ class EditMacroDialog:
     # ── _build_step_editor 的子方法 ──
 
     def _create_scrollable_canvas(self, parent):
-        canvas = tk.Canvas(parent, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=canvas.yview)
-        scrollable = ttk.Frame(canvas)
+        self.edit_canvas = tk.Canvas(parent, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=self.edit_canvas.yview)
+        scrollable = ttk.Frame(self.edit_canvas)
 
-        scrollable.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        win_id = canvas.create_window((0, 0), window=scrollable, anchor="nw")
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win_id, width=e.width))
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollable.bind("<Configure>", lambda e: self.edit_canvas.configure(
+            scrollregion=self.edit_canvas.bbox("all")))
+        win_id = self.edit_canvas.create_window((0, 0), window=scrollable, anchor="nw")
+        self.edit_canvas.bind("<Configure>", lambda e: self.edit_canvas.itemconfig(win_id, width=e.width))
+        self.edit_canvas.configure(yscrollcommand=scrollbar.set)
+        self.edit_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        return canvas, scrollable
+        return self.edit_canvas, scrollable
 
     def _build_type_selector(self, parent, row):
         ttk.Label(parent, text="步骤类型：").grid(row=row, column=0, sticky=tk.W, padx=(10, 0), pady=8)

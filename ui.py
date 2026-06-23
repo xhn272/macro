@@ -12,6 +12,7 @@ from about_text import ABOUT_TEXT
 from config import config as app_config
 from core import mgr
 from edit_dialog import EditMacroDialog
+import theme
 from utils import check_admin_gui, log_error
 
 
@@ -203,6 +204,9 @@ class MainWindow:
         # 热键注销时自动刷新 UI（STOPALL 等在后台线程触发）
         mgr.add_change_callback(lambda: self.window.after_idle(self.current_panel.refresh_list))
 
+        # 启动时应用已保存的主题
+        self._apply_current_theme()
+
     def _build_menubar(self):
         menubar = tk.Menu(self.window)
 
@@ -223,6 +227,15 @@ class MainWindow:
         self.search_visible = tk.BooleanVar(value=False)
         self.view_menu.add_checkbutton(label="搜索框", variable=self.search_visible,
                                         command=self.toggle_search)
+
+        self.view_menu.add_separator()
+        themes_menu = tk.Menu(self.view_menu, tearoff=0)
+        self.view_menu.add_cascade(label="主题", menu=themes_menu)
+        self.theme_var = tk.StringVar(value=app_config.get("theme"))
+        themes_menu.add_radiobutton(label="浅色", variable=self.theme_var,
+                                    value="light", command=lambda: self.switch_theme("light"))
+        themes_menu.add_radiobutton(label="暗色", variable=self.theme_var,
+                                    value="dark", command=lambda: self.switch_theme("dark"))
 
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="关于", command=self.show_about)
@@ -297,6 +310,25 @@ class MainWindow:
 
     def show_settings(self):
         SettingsDialog(self.window)
+
+    def switch_theme(self, name):
+        self._apply_theme_to_ui(name)
+        app_config.set("theme", name)
+        app_config.save()
+        self.current_panel.refresh_list()
+
+    def _apply_current_theme(self):
+        self._apply_theme_to_ui(app_config.get("theme"))
+
+    def _apply_theme_to_ui(self, name):
+        theme.apply_theme(name)
+        theme.apply_treeview_tags(self.classic_panel.tree, name)
+        theme.apply_treeview_tags(self.simple_panel.tree, name)
+        # tk Menu 背景色适配
+        menu_colors = theme.tk_widget_colors(name)
+        menubar = self.window.nametowidget(self.window.cget("menu"))
+        if name == "dark":
+            menubar.config(bg=menu_colors["bg"], fg=menu_colors["fg"])
 
     def restore_config(self):
         if mgr.is_any_registered():
