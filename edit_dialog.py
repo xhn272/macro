@@ -39,7 +39,7 @@ class EditMacroDialog:
         self.left_frame = ttk.Frame(paned)
         paned.add(self.left_frame, weight=2)
 
-        basic_frame = ttk.LabelFrame(self.left_frame, text="基本信息")
+        basic_frame = ttk.LabelFrame(self.left_frame, text="基本信息", padding="8")
         basic_frame.pack(fill=tk.X, pady=(0, 8))
 
         # 名称
@@ -91,7 +91,7 @@ class EditMacroDialog:
         ttk.Label(row4, text="次").pack(side=tk.LEFT)
 
         # 步骤列表区域
-        steps_frame = ttk.LabelFrame(self.left_frame, text="执行步骤")
+        steps_frame = ttk.LabelFrame(self.left_frame, text="执行步骤", padding="8")
         steps_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
         list_container = ttk.Frame(steps_frame)
@@ -111,7 +111,7 @@ class EditMacroDialog:
         right_panel = ttk.Frame(steps_frame)
         right_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(5, 0))
 
-        step_btn_frame = ttk.LabelFrame(right_panel, text="步骤操作")
+        step_btn_frame = ttk.LabelFrame(right_panel, text="步骤操作", padding="5")
         step_btn_frame.pack(fill=tk.X, pady=(0, 5))
         self.step_buttons = []
         btn = ttk.Button(step_btn_frame, text="添加步骤", command=self.add_step, width=12)
@@ -125,7 +125,7 @@ class EditMacroDialog:
         btn = ttk.Button(step_btn_frame, text="下移", command=self.move_step_down, width=12)
         btn.pack(pady=2, padx=5, fill=tk.X); self.step_buttons.append(btn)
 
-        macro_btn_frame = ttk.LabelFrame(right_panel, text="宏操作")
+        macro_btn_frame = ttk.LabelFrame(right_panel, text="宏操作", padding="5")
         macro_btn_frame.pack(fill=tk.X)
         ttk.Button(macro_btn_frame, text="保存宏", command=self.save, width=12).pack(pady=2, padx=5, fill=tk.X)
         ttk.Button(macro_btn_frame, text="取消", command=self.dialog.destroy, width=12).pack(pady=2, padx=5, fill=tk.X)
@@ -134,7 +134,7 @@ class EditMacroDialog:
         self.right_frame = ttk.Frame(paned)
         paned.add(self.right_frame, weight=1)
 
-        step_editor_container = ttk.LabelFrame(self.right_frame, text="编辑步骤")
+        step_editor_container = ttk.LabelFrame(self.right_frame, text="编辑步骤", padding="5")
         step_editor_container.pack(fill=tk.BOTH, expand=True)
 
         self.right_placeholder = ttk.Label(step_editor_container,

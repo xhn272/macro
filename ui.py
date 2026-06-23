@@ -620,7 +620,7 @@ class SimplePanel:
                                      anchor=tk.CENTER)
         self.placeholder.grid(row=0, column=0, sticky="nsew")
 
-        self.info_frame = ttk.LabelFrame(self.right_frame, text="宏信息")
+        self.info_frame = ttk.LabelFrame(self.right_frame, text="宏信息", padding="8")
         self.info_frame.grid(row=0, column=0, sticky="nsew")
         self.info_frame.grid_remove()
 
