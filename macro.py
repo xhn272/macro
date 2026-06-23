@@ -6,6 +6,8 @@
 
 import threading
 
+import ttkbootstrap as ttk
+
 from config import config as app_config
 from core import setup_crash_handler
 from ui import MainWindow
@@ -14,14 +16,8 @@ from update_checker import check_for_updates
 
 def main():
     setup_crash_handler()
-    # 非默认主题时才加载 ttkbootstrap，保持原生外观作为默认
-    theme = app_config.get("theme")
-    if theme and theme != "default":
-        try:
-            import ttkbootstrap as tb
-            tb.Style(theme=theme)
-        except ImportError:
-            pass
+    # 启动时应用用户设置的主题，默认为 litera
+    ttk.Style(theme=app_config.get("theme"))
     app = MainWindow()
     # 启动后 1.5 秒在后台线程检查更新，不阻塞 UI
     if app_config.get("check_update"):
