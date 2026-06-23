@@ -6,8 +6,7 @@ import os
 import sys
 import traceback
 import tkinter as tk
-import ttkbootstrap as ttk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 from about_text import ABOUT_TEXT
 from config import config as app_config
@@ -230,8 +229,7 @@ class MainWindow:
         self.view_menu.add_cascade(label="主题", menu=themes_menu)
         self.theme_var = tk.StringVar(value=app_config.get("theme"))
         THEMES = [
-            ("litera（浅色）", "litera"),
-            ("flatly（浅色）", "flatly"),
+            ("默认", "default"),
             ("darkly（暗色）", "darkly"),
             ("cyborg（暗色）", "cyborg"),
         ]
@@ -315,7 +313,17 @@ class MainWindow:
         SettingsDialog(self.window)
 
     def switch_theme(self, theme):
-        ttk.Style().theme_use(theme)
+        if theme == "default":
+            ttk.Style().theme_use("vista")
+        else:
+            try:
+                import ttkbootstrap as tb
+                tb.Style(theme=theme)
+            except ImportError:
+                messagebox.showwarning("提示", "未安装 ttkbootstrap 库，无法切换主题。",
+                                       parent=self.window)
+                self.theme_var.set("default")
+                return
         app_config.set("theme", theme)
         app_config.save()
 
