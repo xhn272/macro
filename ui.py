@@ -6,7 +6,8 @@ import os
 import sys
 import traceback
 import tkinter as tk
-from tkinter import messagebox, ttk
+import ttkbootstrap as ttk
+from tkinter import messagebox
 
 from about_text import ABOUT_TEXT
 from config import config as app_config
@@ -224,6 +225,21 @@ class MainWindow:
         self.view_menu.add_checkbutton(label="搜索框", variable=self.search_visible,
                                         command=self.toggle_search)
 
+        self.view_menu.add_separator()
+        themes_menu = tk.Menu(self.view_menu, tearoff=0)
+        self.view_menu.add_cascade(label="主题", menu=themes_menu)
+        self.theme_var = tk.StringVar(value=app_config.get("theme"))
+        THEMES = [
+            ("litera（浅色）", "litera"),
+            ("flatly（浅色）", "flatly"),
+            ("darkly（暗色）", "darkly"),
+            ("cyborg（暗色）", "cyborg"),
+        ]
+        for label, name in THEMES:
+            themes_menu.add_radiobutton(
+                label=label, variable=self.theme_var, value=name,
+                command=lambda n=name: self.switch_theme(n))
+
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="关于", command=self.show_about)
         menubar.add_cascade(label="帮助", menu=help_menu)
@@ -298,6 +314,11 @@ class MainWindow:
     def show_settings(self):
         SettingsDialog(self.window)
 
+    def switch_theme(self, theme):
+        ttk.Style().theme_use(theme)
+        app_config.set("theme", theme)
+        app_config.save()
+
     def restore_config(self):
         if mgr.is_any_registered():
             messagebox.showwarning("操作被禁止", "请先停用所有宏后再恢复配置。")
@@ -367,7 +388,7 @@ class ClassicPanel:
         self.tree.column("步骤数", width=40, anchor="center")
 
         self.tree.tag_configure("selected", foreground="green")
-        self.tree.tag_configure("disabled", foreground="black")
+        self.tree.tag_configure("disabled", foreground="gray")
         self.tree.bind("<Double-1>", self.on_double_click)
         self.tree.bind("<Button-1>", self.on_click)
 
@@ -584,7 +605,7 @@ class SimplePanel:
         self.tree.heading("名称", text="宏名称")
         self.tree.column("名称", width=210, anchor="w", stretch=True)
         self.tree.tag_configure("selected", foreground="green")
-        self.tree.tag_configure("disabled", foreground="black")
+        self.tree.tag_configure("disabled", foreground="gray")
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
 
         scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self.tree.yview)

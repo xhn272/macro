@@ -3,7 +3,8 @@
 
 import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
+import ttkbootstrap as ttk
+from tkinter import messagebox
 
 import keyboard
 import mouse
