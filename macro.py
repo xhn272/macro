@@ -14,15 +14,11 @@ from update_checker import check_for_updates
 
 def main():
     setup_crash_handler()
-    # 非默认主题时才加载 ttkbootstrap，保持原生外观作为默认
+    app = MainWindow()
+    # 创建窗口后应用主题，避免 ttkbootstrap 自动生成额外 Tk 根窗口
     theme = app_config.get("theme")
     if theme and theme != "default":
-        try:
-            import ttkbootstrap as tb
-            tb.Style(theme=theme)
-        except ImportError:
-            pass
-    app = MainWindow()
+        app.switch_theme(theme)
     # 启动后 1.5 秒在后台线程检查更新，不阻塞 UI
     if app_config.get("check_update"):
         app.window.after(1500, lambda: threading.Thread(
