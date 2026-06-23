@@ -11,7 +11,6 @@ DEFAULTS = {
     "log_keep": 50,
     "macros_file": "macros.json",
     "backup_keep": 10,
-    "theme": "litera",
 }
 
 
