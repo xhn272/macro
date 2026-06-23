@@ -396,7 +396,7 @@ class ClassicPanel:
         self.tree.column("步骤数", width=40, anchor="center")
 
         self.tree.tag_configure("selected", foreground="green")
-        self.tree.tag_configure("disabled", foreground="black")
+        self.tree.tag_configure("disabled", foreground="gray")
         self.tree.bind("<Double-1>", self.on_double_click)
         self.tree.bind("<Button-1>", self.on_click)
 
@@ -613,7 +613,7 @@ class SimplePanel:
         self.tree.heading("名称", text="宏名称")
         self.tree.column("名称", width=210, anchor="w", stretch=True)
         self.tree.tag_configure("selected", foreground="green")
-        self.tree.tag_configure("disabled", foreground="black")
+        self.tree.tag_configure("disabled", foreground="gray")
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
 
         scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self.tree.yview)
