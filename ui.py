@@ -16,6 +16,9 @@ import theme
 from utils import check_admin_gui, log_error
 
 
+class A:
+    pass
+
 class SearchBar:
     """搜索框组件，封装搜索输入、清除按钮和显示/隐藏逻辑。"""
 
